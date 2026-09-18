@@ -128,6 +128,8 @@ function bindCurrent(q){
 }
 
 renderStep=function(){
+ state.question=Number.isInteger(state.question)?state.question:0;
+ state.feedback=Boolean(state.feedback);
  renderNav();const s=STEPS[state.step],q=s.questions[state.question];
  const total=STEPS.reduce((n,x)=>n+x.questions.length,0),done=STEPS.slice(0,state.step).reduce((n,x)=>n+x.questions.length,0)+state.question+1;
  $("#stepNumber").textContent=`${s.title} · question ${state.question+1}/${s.questions.length}`;$("#progressBar").style.width=`${done/total*100}%`;
