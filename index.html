@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10243e">
+  <meta name="description" content="Un fil conducteur doux pour les séances de D’Âme & de Sens.">
+  <title>Méthode ÉCLAT — D’Âme & de Sens</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" id="homeBtn" type="button" aria-label="Retour à l’accueil">
+      <span class="brand-mark">D<span>’</span></span>
+      <span><strong>D’Âme & de Sens</strong><small>Méthode ÉCLAT</small></span>
+    </button>
+    <button class="ghost small" id="privacyBtn" type="button">Confidentialité</button>
+  </header>
+
+  <main>
+    <section id="welcome" class="welcome">
+      <div class="intro-card">
+        <p class="eyebrow">La méthode ÉCLAT</p>
+        <h1>Du poids vécu<br><em>à la ressource révélée.</em></h1>
+        <p class="lead">Une méthode de séance en six mouvements pour écouter l’épreuve, suivre ses résonances et transformer ce qu’elle révèle en ressource concrète.</p>
+        <div class="start-actions">
+          <button class="primary" id="newSession" type="button">Commencer une séance <span>→</span></button>
+          <button class="secondary" id="resumeSession" type="button" hidden>Reprendre la séance</button>
+        </div>
+        <p class="local-note">Les réponses restent uniquement sur cet appareil.</p>
+      </div>
+      <aside class="path-preview" aria-label="Étapes du parcours">
+        <span class="path-line"></span>
+        <div><b>É</b><span>Épreuve actuelle</span></div>
+        <div><b>C</b><span>Corps & émotions</span></div>
+        <div><b>L</b><span>Liens & répétitions</span></div>
+        <div><b>A</b><span>Axe essentiel</span></div>
+        <div><b>T</b><span>Trésor révélé</span></div>
+        <div><b>✦</b><span>Ancrage</span></div>
+      </aside>
+    </section>
+
+    <section id="session" class="session" hidden>
+      <aside class="sidebar">
+        <div class="session-name-wrap">
+          <label for="sessionName">Repère de séance</label>
+          <input id="sessionName" autocomplete="off" placeholder="Prénom ou initiales">
+        </div>
+        <nav id="stepNav" aria-label="Étapes de la séance"></nav>
+        <div class="sidebar-bottom">
+          <button class="ghost" id="summaryBtn" type="button">Voir la synthèse</button>
+          <button class="text-button danger" id="resetBtn" type="button">Effacer la séance</button>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <div class="progress"><span id="progressBar"></span></div>
+        <div class="step-meta"><span id="stepNumber"></span><span id="saveState">Enregistré sur cet appareil</span></div>
+        <div id="stepContent" class="step-content"></div>
+        <div class="nav-actions">
+          <button class="secondary" id="previousBtn" type="button">← Précédent</button>
+          <button class="primary" id="nextBtn" type="button">Continuer <span>→</span></button>
+        </div>
+      </div>
+    </section>
+
+    <section id="summary" class="summary" hidden>
+      <div class="summary-head">
+        <div><p class="eyebrow">Synthèse ÉCLAT</p><h1>La carte de transformation</h1></div>
+        <div class="summary-actions">
+          <button class="secondary" id="backToSession" type="button">Modifier</button>
+          <button class="primary" id="printBtn" type="button">Imprimer / PDF</button>
+        </div>
+      </div>
+      <div id="transformationCard" class="transformation-card"></div>
+      <div id="summaryContent" class="summary-grid"></div>
+      <p class="disclaimer">Cet outil soutient l’exploration personnelle. Il ne pose aucun diagnostic et ne remplace pas un suivi médical ou psychologique.</p>
+    </section>
+  </main>
+
+  <dialog id="privacyDialog">
+    <button class="dialog-close" aria-label="Fermer" type="button">×</button>
+    <p class="eyebrow">Confidentialité</p>
+    <h2>Vos notes restent ici</h2>
+    <p>Cette version n’envoie aucune réponse sur Internet. Les informations sont enregistrées dans le navigateur de cet appareil pour permettre de reprendre la séance.</p>
+    <p>Pour une utilisation avec des personnes reçues en séance, privilégiez des initiales et effacez la séance lorsqu’elle n’est plus utile.</p>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
