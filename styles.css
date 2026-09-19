@@ -591,37 +591,6 @@ main {
   margin: 0 auto;
 }
 
-.guide-bubble {
-  background: linear-gradient(135deg, #fffaf4, #fff);
-  border: 1px solid rgba(190, 142, 75, 0.28);
-  border-radius: 22px 22px 22px 6px;
-  padding: 22px 24px;
-  margin: 18px 0;
-  box-shadow: 0 12px 34px rgba(16, 36, 62, 0.07);
-  position: relative;
-}
-
-.guide-bubble .guide-name {
-  display: block;
-  color: #aa7530;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin-bottom: 9px;
-}
-
-.guide-bubble p {
-  margin: 0;
-  line-height: 1.65;
-  color: #26384d;
-}
-
-.guide-bubble.feedback {
-  background: linear-gradient(135deg, #f8f1e8, #fff);
-  animation: softAppear 0.35s ease;
-}
-
 .single-question {
   animation: softAppear 0.35s ease;
 }
