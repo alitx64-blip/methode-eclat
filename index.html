@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mon parcours ÉCLAT — D’Âme & de Sens</title>
   <link rel="icon" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=20260919-4">
+  <link rel="stylesheet" href="styles.css?v=20260919-5">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#10243e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <script type="module" src="app.js?v=20260919-4"></script>
+  <script type="module" src="app.js?v=20260919-5"></script>
 </head>
 <body>
 
@@ -24,6 +24,7 @@
       </span>
     </button>
     <div>
+      <button class="ghost small" id="journeyBtn" type="button">Mon évolution</button>
       <button class="ghost small" id="breathBtn" type="button">♡ Respiration</button>
       <button class="ghost small" id="privacyBtn" type="button">Confidentialité</button>
     </div>
@@ -41,6 +42,8 @@
           <button class="primary" id="newSession" type="button">Commencer mon parcours <span>→</span></button>
           <button class="secondary" id="resumeSession" type="button" hidden>Reprendre mon parcours</button>
         </div>
+
+        <section id="journeyPanel" class="journey-panel" hidden aria-live="polite"></section>
         
         <p class="local-note">Comptez 15 à 25 minutes. Vos réponses restent sur cet appareil.</p>
       </div>
