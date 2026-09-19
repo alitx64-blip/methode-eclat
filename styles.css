@@ -249,7 +249,13 @@ main {
   padding: 20px 0;
 }
 
-.path-preview > div {
+.path-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.path-preview li {
   display: flex;
   align-items: center;
   gap: 22px;
@@ -617,12 +623,6 @@ main {
 
 .single-question {
   animation: softAppear 0.35s ease;
-}
-
-.question-counter {
-  font-size: 0.82rem;
-  color: #718096;
-  margin-bottom: 10px;
 }
 
 .skip-note {
