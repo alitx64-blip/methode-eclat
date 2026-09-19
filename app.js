@@ -817,6 +817,7 @@ function question(q) {
     return `
       <article class="question-card${cls}">
         ${badge}
+        <button type="button" class="audio-btn" id="speakQuestionBtn" title="Écouter la question">🔊</button>
         <div class="question-title">${escapeHtml(q.label)}</div>
         ${q.hint ? `<p class="question-hint">${q.hint}</p>` : ""}
         <div class="chips" data-id="${q.id}">
@@ -831,6 +832,7 @@ function question(q) {
     return `
       <article class="question-card${cls}">
         ${badge}
+        <button type="button" class="audio-btn" id="speakQuestionBtn" title="Écouter la question">🔊</button>
         <label for="${q.id}">${escapeHtml(q.label)}</label>
         <div class="scale-wrap">
           <input id="${q.id}" data-id="${q.id}" type="range" min="0" max="10" value="${val}">
@@ -843,6 +845,7 @@ function question(q) {
   return `
     <article class="question-card${cls}">
       ${badge}
+      <button type="button" class="audio-btn" id="speakQuestionBtn" title="Écouter la question">🔊</button>
       <label for="${q.id}">${escapeHtml(q.label)}</label>
       ${q.hint ? `<p class="question-hint">${q.hint}</p>` : ""}
       <textarea id="${q.id}" data-id="${q.id}" placeholder="Noter les mots qui viennent…">${escapeHtml(val)}</textarea>
@@ -1375,7 +1378,8 @@ function bind(q) {
 
 function renderStep() {
   state.question = Number.isInteger(state.question) ? state.question : 0;
-  state.feedback = Boolean(state.feedback);
+  state.feedback = false;
+  state.feedbackQuestionId = null;
   
   renderNav();
 
@@ -1428,24 +1432,18 @@ function renderStep() {
   stepContent.innerHTML = `
     <div class="conversation">
       ${intro}
-      <div class="guide-bubble ${state.feedback ? 'feedback' : ''}">
-        <button type="button" class="audio-btn" id="speakGuideBtn" title="Écouter la question">🔊</button>
-        <span class="guide-name">Votre guide ÉCLAT</span>
-        <p id="guideMessage">${state.feedback ? guideReaction(q) : conversationLead(q, currentQuestions)}</p>
+      ${state.clarificationQuestionId === q.id ? '<p class="question-hint clarification-note">Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?</p>' : ''}
+      <div class="single-question">
+        ${question(q)}
+        <p class="skip-note">Vous pouvez continuer sans répondre.</p>
       </div>
-      ${state.feedback ? '' : `
-        <div class="single-question">
-          ${question(q)}
-          <p class="skip-note">Vous pouvez continuer sans répondre.</p>
-        </div>
-      `}
     </div>
   `;
 
-  if (!state.feedback) bind(q);
+  bind(q);
 
-  $("#previousBtn").style.visibility = (!state.step && !state.question && !state.feedback) ? "hidden" : "visible";
-  $("#nextBtn").innerHTML = state.feedback ? "Continuer →" : "Confier ma réponse →";
+  $("#previousBtn").style.visibility = (!state.step && !state.question) ? "hidden" : "visible";
+  $("#nextBtn").innerHTML = "Confier ma réponse →";
 }
 
 function collect() {
@@ -1594,24 +1592,15 @@ function renderSummary(complete = false) {
   show(summary);
 }
 
-// Synthèse Vocale (Text-to-Speech)
-function speakGuideText() {
-  const msgEl = $("#guideMessage");
-  if (!msgEl || !('speechSynthesis' in window)) return;
-  
+document.addEventListener("click", event => {
+  if (event.target?.id !== "speakQuestionBtn" || !("speechSynthesis" in window)) return;
+  const text = event.target.closest(".question-card")?.querySelector("label, .question-title")?.textContent;
+  if (!text) return;
   window.speechSynthesis.cancel();
-  const text = msgEl.textContent || msgEl.innerText;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "fr-FR";
   utterance.rate = 0.92;
-  utterance.pitch = 1.0;
   window.speechSynthesis.speak(utterance);
-}
-
-document.addEventListener("click", (e) => {
-  if (e.target && e.target.id === "speakGuideBtn") {
-    speakGuideText();
-  }
 });
 
 // Respiration / Cohérence Cardiaque
@@ -1706,26 +1695,18 @@ $("#previousBtn").onclick = () => {
 };
 
 $("#nextBtn").onclick = () => {
-  if (!state.feedback) {
-    const currentQuestions = activeQuestions(state.step);
-    const questionId = state.currentQuestionId || currentQuestions[state.question]?.id || null;
-    const currentQuestion = currentQuestions.find(question => question.id === questionId);
-    const currentAnswer = currentQuestion ? state.answers[currentQuestion.id] : "";
-    if (currentQuestion?.type === "text" && textValue(currentAnswer).trim() && isIncompleteAnswer(currentAnswer)) {
-      state.clarificationQuestionId = currentQuestion.id;
-      save();
-      renderStep();
-      return;
-    }
-    state.clarificationQuestionId = null;
-    if (currentQuestion && !feedbackWorthShowing(currentQuestion)) return moveForwardFrom(questionId);
-    state.feedbackQuestionId = questionId;
-    state.feedback = true;
+  const currentQuestions = activeQuestions(state.step);
+  const questionId = state.currentQuestionId || currentQuestions[state.question]?.id || null;
+  const currentQuestion = currentQuestions.find(question => question.id === questionId);
+  const currentAnswer = currentQuestion ? state.answers[currentQuestion.id] : "";
+  if (currentQuestion?.type === "text" && textValue(currentAnswer).trim() && isIncompleteAnswer(currentAnswer)) {
+    state.clarificationQuestionId = currentQuestion.id;
     save();
     renderStep();
     return;
   }
-  moveForwardFrom(state.feedbackQuestionId || state.currentQuestionId);
+  state.clarificationQuestionId = null;
+  moveForwardFrom(questionId);
 };
 
 $("#summaryBtn").onclick = () => renderSummary(false);
