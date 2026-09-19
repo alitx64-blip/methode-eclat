@@ -275,21 +275,132 @@ const RESOURCE_PATHS = {
 };
 
 const KEY = "dads-chemin-interieur-v1";
-let state = { step: 0, question: 0, feedback: false, name: "", answers: {}, updatedAt: null };
+const HISTORY_KEY = "dads-eclat-history-v1";
+let state = freshState();
+let history = [];
+
+function freshState() {
+  return {
+    id: `eclat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    step: 0,
+    question: 0,
+    feedback: false,
+    name: "",
+    answers: {},
+    startedAt: new Date().toISOString(),
+    updatedAt: null,
+    completedAt: null
+  };
+}
 
 const $ = s => document.querySelector(s);
 const welcome = $("#welcome"), session = $("#session"), summary = $("#summary"), stepContent = $("#stepContent");
 
 function load() {
   try {
+    history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    if (!Array.isArray(history)) history = [];
     const saved = localStorage.getItem(KEY);
     if (saved) {
       state = { ...state, ...JSON.parse(saved) };
       $("#resumeSession").hidden = false;
     }
+    renderJourneyPanel();
   } catch (e) {
     console.warn(e);
   }
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+}
+
+function sessionTheme(item) {
+  const signal = detectedSignals(item.answers || {})[0];
+  return signal ? signal.name : (item.answers?.coreWord || "un thème à préciser");
+}
+
+function evolutionLabel(start, end) {
+  if (!Number.isFinite(+start) || !Number.isFinite(+end)) return "Évolution non mesurée";
+  const delta = +start - +end;
+  if (delta >= 3) return `Apaisement marqué · −${delta} points`;
+  if (delta > 0) return `Apaisement amorcé · −${delta} point${delta > 1 ? "s" : ""}`;
+  if (delta === 0) return "Intensité stable · observation à poursuivre";
+  return `Intensité encore présente · +${Math.abs(delta)} point${Math.abs(delta) > 1 ? "s" : ""}`;
+}
+
+function renderJourneyPanel(forceOpen = false) {
+  const panel = $("#journeyPanel");
+  if (!panel) return;
+  if (!history.length) {
+    panel.hidden = !forceOpen;
+    panel.innerHTML = `<p class="journey-empty"><strong>Votre évolution commencera ici.</strong><br>Après votre premier parcours terminé, vous retrouverez vos prises de conscience, vos actions et les changements observés.</p>`;
+    return;
+  }
+
+  panel.hidden = false;
+  const ordered = [...history].sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  const latest = ordered[0];
+  const completedActions = ordered.filter(item => item.actionCompletedAt).length;
+  const intensities = ordered.filter(item => Number.isFinite(+item.answers?.startIntensity) && Number.isFinite(+item.answers?.endIntensity));
+  const totalRelief = intensities.reduce((sum, item) => sum + Math.max(0, +item.answers.startIntensity - +item.answers.endIntensity), 0);
+
+  panel.innerHTML = `
+    <div class="journey-heading">
+      <div><p class="eyebrow">Votre chemin dans le temps</p><h2>Mon évolution</h2></div>
+      <span class="journey-count">${history.length} parcours terminé${history.length > 1 ? "s" : ""}</span>
+    </div>
+    <div class="journey-stats">
+      <div><strong>${history.length}</strong><span>bilans conservés</span></div>
+      <div><strong>${completedActions}</strong><span>actions réalisées</span></div>
+      <div><strong>${totalRelief}</strong><span>points d’apaisement cumulés</span></div>
+    </div>
+    ${latest.answers?.action ? `<div class="next-step-card">
+      <small>Votre petit pas actuel</small>
+      <p>${escapeHtml(latest.answers.action)}</p>
+      ${latest.actionCompletedAt
+        ? `<span class="action-done">✓ Réalisé le ${formatDate(latest.actionCompletedAt)}</span>`
+        : `<button type="button" class="secondary compact" data-complete-action="${escapeHtml(latest.id)}">Marquer comme réalisé</button>`}
+    </div>` : ""}
+    <div class="journey-timeline">
+      ${ordered.slice(0, 6).map((item, index) => `
+        <article class="timeline-item">
+          <span class="timeline-dot">${ordered.length - index}</span>
+          <div><small>${formatDate(item.completedAt)}</small><h3>${escapeHtml(sessionTheme(item))}</h3>
+          <p>${escapeHtml(evolutionLabel(item.answers?.startIntensity, item.answers?.endIntensity))}</p>
+          ${item.answers?.takeaway ? `<blockquote>« ${escapeHtml(shortAnswer(item.answers.takeaway, 120))} »</blockquote>` : ""}</div>
+        </article>`).join("")}
+    </div>`;
+
+  panel.querySelectorAll("[data-complete-action]").forEach(button => {
+    button.onclick = () => {
+      const item = history.find(entry => entry.id === button.dataset.completeAction);
+      if (!item) return;
+      item.actionCompletedAt = new Date().toISOString();
+      saveHistory();
+      renderJourneyPanel(true);
+    };
+  });
+}
+
+function archiveCompletedSession() {
+  state.completedAt = state.completedAt || new Date().toISOString();
+  const snapshot = JSON.parse(JSON.stringify(state));
+  const existing = history.findIndex(item => item.id === snapshot.id);
+  if (existing >= 0) history[existing] = { ...history[existing], ...snapshot };
+  else history.push(snapshot);
+  saveHistory();
+  save();
+  renderJourneyPanel();
 }
 
 function save() {
@@ -535,7 +646,7 @@ function collect() {
 
 function start(fresh = false) {
   if (fresh) {
-    state = { step: 0, question: 0, feedback: false, name: "", answers: {}, updatedAt: null };
+    state = freshState();
     save();
   }
   const nameInput = $("#sessionName");
@@ -544,8 +655,9 @@ function start(fresh = false) {
   renderStep();
 }
 
-function renderSummary() {
+function renderSummary(complete = false) {
   collect();
+  if (complete) archiveCompletedSession();
   const a = state.answers;
   const themes = Array.isArray(a.themes) ? a.themes.join(" · ") : a.themes;
   const source = a.coreWord || themes || "À préciser";
@@ -561,6 +673,9 @@ function renderSummary() {
 
   const signals = detectedSignals(a).slice(0, 3);
   const signal = signals[0] || null;
+  const previous = [...history]
+    .filter(item => item.id !== state.id)
+    .sort((left, right) => new Date(right.completedAt) - new Date(left.completedAt))[0];
   const openingWords = shortAnswer(a.reason || a.difficulty);
   const changeWords = shortAnswer(a.change || a.takeaway);
   const personalReading = signal ? `
@@ -576,6 +691,20 @@ function renderSummary() {
     <div class="detected-themes" aria-label="Thèmes repérés">
       ${signals.map(item => `<span>${escapeHtml(item.name)}</span>`).join("")}
     </div>` : "";
+
+  const comparison = previous ? `
+    <div class="evolution-comparison">
+      <small>Depuis votre parcours du ${formatDate(previous.completedAt)}</small>
+      <div class="comparison-grid">
+        <div><span>Thème précédent</span><strong>${escapeHtml(sessionTheme(previous))}</strong></div>
+        <div><span>Thème actuel</span><strong>${escapeHtml(signal ? signal.name : (a.coreWord || "À préciser"))}</strong></div>
+      </div>
+      <p>${previous.actionCompletedAt ? "Vous aviez réalisé le petit pas choisi." : "Votre ancien petit pas peut encore être repris, ajusté ou laissé de côté si votre besoin a changé."}</p>
+    </div>` : `
+    <div class="evolution-comparison first">
+      <small>Votre point de départ</small>
+      <p>Ce bilan devient votre premier repère. Lors d’un prochain parcours, ÉCLAT pourra mettre en lumière ce qui a changé.</p>
+    </div>`;
 
   $("#transformationCard").innerHTML = `
     <h2>Le fil essentiel de la séance</h2>
@@ -594,7 +723,9 @@ function renderSummary() {
       ${a.successEvidence ? `<p><b>Le signe qui permettra de reconnaître le changement :</b> ${escapeHtml(a.successEvidence)}</p>` : ""}
       ${a.commitment !== undefined ? `<p><b>Engagement ressenti :</b> ${escapeHtml(a.commitment)} / 10${+a.commitment < 7 ? " — l’action mérite d’être simplifiée ou ajustée." : ""}</p>` : ""}
     </div>
-    ${personalReading}`;
+    ${personalReading}
+    ${comparison}
+    ${complete ? `<div class="return-invitation"><strong>Votre prochain rendez-vous avec vous-même</strong><p>Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît. Votre nouveau bilan sera comparé à celui-ci.</p></div>` : ""}`;
 
   $("#summaryContent").innerHTML = STEPS.map((s, i) => `
     <article class="summary-card">
@@ -719,13 +850,13 @@ $("#nextBtn").onclick = () => {
     state.step++;
     state.question = 0;
   } else {
-    return renderSummary();
+    return renderSummary(true);
   }
   save();
   renderStep();
 };
 
-$("#summaryBtn").onclick = renderSummary;
+$("#summaryBtn").onclick = () => renderSummary(false);
 $("#backToSession").onclick = () => { show(session); renderStep(); };
 $("#printBtn").onclick = () => window.print();
 $("#homeBtn").onclick = () => show(welcome);
@@ -736,7 +867,7 @@ if (nameInput) nameInput.oninput = e => { state.name = e.target.value; save(); }
 $("#resetBtn").onclick = () => {
   if (confirm("Effacer définitivement toutes les réponses de ce parcours ?")) {
     try { localStorage.removeItem(KEY); } catch (e) {}
-    state = { step: 0, question: 0, feedback: false, name: "", answers: {}, updatedAt: null };
+    state = freshState();
     $("#resumeSession").hidden = true;
     show(welcome);
   }
@@ -749,5 +880,12 @@ if (dlg) {
   if (closeBtn) closeBtn.onclick = () => dlg.close();
   dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
 }
+
+const journeyBtn = $("#journeyBtn");
+if (journeyBtn) journeyBtn.onclick = () => {
+  show(welcome);
+  renderJourneyPanel(true);
+  $("#journeyPanel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+};
 
 load();
