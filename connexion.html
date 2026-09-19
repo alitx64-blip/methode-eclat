@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Accès à ÉCLAT — D’Âme & de Sens</title>
+  <style>
+    :root{--blue:#10243e;--gold:#c5a35a;--paper:#fffaf4;--ink:#26384d;--terra:#b8654d}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at top,#fff 0,var(--paper) 48%,#f2e7d9 100%);color:var(--ink);font-family:system-ui,-apple-system,sans-serif}
+    main{width:min(100%,460px);background:#fff;border:1px solid rgba(197,163,90,.4);border-radius:24px;padding:clamp(28px,7vw,46px);box-shadow:0 24px 70px rgba(16,36,62,.12)}
+    .brand{color:var(--terra);font-size:.74rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{margin:12px 0 10px;color:var(--blue);font-family:Georgia,serif;font-size:clamp(2rem,8vw,3rem);font-weight:400}p{line-height:1.6;color:#68717b}
+    label{display:block;margin:24px 0 8px;font-weight:700;color:var(--blue)}input[type=password]{width:100%;border:1px solid #d8cdbf;border-radius:12px;padding:14px 15px;font:inherit;outline:none}input[type=password]:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(197,163,90,.16)}
+    .remember{display:flex;align-items:center;gap:9px;margin:15px 0 22px;font-weight:500;font-size:.92rem}.remember input{accent-color:var(--terra)}button{width:100%;border:0;border-radius:999px;padding:14px 20px;background:var(--blue);color:#fff;font:inherit;font-weight:750;cursor:pointer}button:hover{background:#193653}button:disabled{opacity:.65;cursor:wait}
+    #message{min-height:24px;margin:14px 0 0;color:#a13d2c;font-size:.9rem}.back{display:block;margin-top:20px;text-align:center;color:var(--blue);font-size:.88rem}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">D’Âme & de Sens · Outils</div>
+    <h1>Accéder à ÉCLAT</h1>
+    <p>Cet espace est réservé aux personnes autorisées. Saisissez le mot de passe qui vous a été transmis.</p>
+    <form id="loginForm" method="post" action="/api/auth/login">
+      <label for="password">Mot de passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <label class="remember"><input id="remember" name="remember" type="checkbox" value="true" checked> Rester connecté sur cet appareil</label>
+      <button type="submit">Entrer dans ÉCLAT</button>
+      <p id="message" role="alert" aria-live="polite"></p>
+    </form>
+    <a class="back" href="https://dametdesens.com/outils">← Retour aux outils</a>
+  </main>
+  <script>
+    const form=document.getElementById('loginForm');
+    const message=document.getElementById('message');
+    form.addEventListener('submit',async(event)=>{
+      event.preventDefault();
+      const button=form.querySelector('button');button.disabled=true;message.textContent='';
+      try{
+        const response=await fetch('/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:form.password.value,remember:form.remember.checked})});
+        if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.message||'Mot de passe incorrect.');}
+        const params=new URLSearchParams(location.search);location.replace(params.get('retour')||'/');
+      }catch(error){message.textContent=error.message;button.disabled=false;form.password.select();}
+    });
+  </script>
+</body>
+</html>
