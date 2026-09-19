@@ -122,6 +122,10 @@ function containsCauseEffect(v) { return /\b(il|elle|ils|elles|ca|cela) me (rend
 function isNegativeGoal(v) { return /\b(ne plus|plus jamais|arreter de|eviter de|ne pas|moins de)\b/.test(normalized(v)); }
 
 const EMOTION_DEEPENERS = {
+  "Colère": {
+    id: "angerMessage",
+    label: "Quelle limite, règle ou valeur importante vous semble franchie dans cette situation ?"
+  },
   "Colère / agacement": {
     id: "angerMessage",
     label: "Quelle limite, règle ou valeur importante vous semble franchie dans cette situation ?"
@@ -655,6 +659,7 @@ function beliefReframe(a) {
 function emotionReading(a) {
   const emotions = Array.isArray(a.emotions) ? a.emotions.filter(item => item !== "Autre") : [];
   const meanings = {
+    "Colère": "une limite, une valeur ou une place qui demande à être regardée",
     "Colère / agacement": "une limite, une valeur ou une place qui demande à être regardée",
     "Tristesse": "une perte, une fin ou une transition qui demande à être reconnue",
     "Peur": "un danger possible, un manque de préparation ou un besoin de sécurité",
