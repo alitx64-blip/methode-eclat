@@ -1,4 +1,5 @@
-const DEFAULT_MODEL = "openrouter/free";
+// Modèle open-weight actuellement gratuit ; surcharge possible avec OPENROUTER_MODEL.
+const DEFAULT_MODEL = "qwen/qwen3.8-flash";
 const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
