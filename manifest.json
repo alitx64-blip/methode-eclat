@@ -1,0 +1,17 @@
+{
+  "short_name": "ÉCLAT",
+  "name": "Mon parcours ÉCLAT — D’Âme & de Sens",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512 192x192 64x64 32x32"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#f7f3ea",
+  "theme_color": "#10243e",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "fr-FR"
+}
