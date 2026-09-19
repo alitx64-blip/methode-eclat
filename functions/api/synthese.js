@@ -28,7 +28,7 @@ export async function onRequestPost({ request, env }) {
   if (!body || typeof body.responses !== "object" || Array.isArray(body.responses)) return json({ message: "Réponses invalides." }, 400);
 
   const responses = Object.fromEntries(Object.entries(body.responses)
-    .filter(([key, value]) => key.length <= 60 && (typeof value === "string" || Array.isArray(value)))
+    .filter(([key, value]) => key.length <= 60 && (typeof value === "string" || typeof value === "number" || Array.isArray(value)))
     .map(([key, value]) => [key, Array.isArray(value) ? value.slice(0, 6).map(String).join(" · ").slice(0, 900) : String(value).slice(0, 900)])
     .filter(([, value]) => value.trim()));
   const serialized = JSON.stringify(responses);
@@ -51,6 +51,7 @@ export async function onRequestPost({ request, env }) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `Réponses du parcours ÉCLAT :\n${serialized}` }
         ],
+        provider: { data_collection: "deny", zdr: true },
         temperature: 0.35,
         max_tokens: 750
       })
