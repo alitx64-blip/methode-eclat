@@ -7,7 +7,7 @@ const STEPS = [
     questions: [
       { id: "reason", label: "Qu’est-ce qui vous amène aujourd’hui ?", type: "text", hint: "Écrivez ce qui vient, sans chercher tout de suite à l’expliquer." },
       { id: "difficulty", label: "Qu’est-ce qui est le plus difficile pour vous dans cette situation ?", type: "text" },
-      { id: "intention", label: "Qu’aimeriez-vous comprendre, apaiser ou faire évoluer ?", type: "text" },
+      { id: "intention", label: "À la place de cette difficulté, quelle situation aimeriez-vous vivre ?", type: "text", hint: "Formulez si possible ce que vous souhaitez voir apparaître, plutôt que seulement ce que vous ne voulez plus." },
       { id: "startIntensity", label: "Quelle place cette difficulté prend-elle aujourd’hui ?", type: "scale" }
     ]
   },
@@ -28,6 +28,7 @@ const STEPS = [
       { id: "recurrence", label: "Est-ce une situation isolée ou quelque chose qui semble se répéter ?", type: "chips", options: ["Situation isolée", "Cela revient parfois", "Cela revient souvent", "Je ne sais pas"] },
       { id: "triggers", label: "Qu’est-ce qui déclenche généralement cette réaction ?", type: "text" },
       { id: "protection", label: "Que faites-vous habituellement pour vous protéger ?", type: "chips", options: ["Je fuis", "Je contrôle", "Je me tais", "Je m’adapte", "Je me défends", "Je me coupe de mes émotions", "Autre"] },
+      { id: "irritation", label: "Chez une personne impliquée, quel comportement ou trait vous touche, vous agace ou vous déstabilise particulièrement ?", type: "text", hint: "Il ne s’agit pas de nier ce que l’autre fait, seulement d’observer ce que cela vient réveiller en vous." },
       { id: "familiar", label: "Cette sensation vous paraît-elle familière ?", type: "text", hint: "Un souvenir peut venir spontanément, mais il n’est pas nécessaire d’en trouver un." },
       { id: "pastNeed", label: "De quoi auriez-vous eu besoin à ce moment-là ?", type: "text" }
     ]
@@ -39,6 +40,7 @@ const STEPS = [
       { id: "coreWord", label: "Si cette difficulté portait un seul mot, lequel serait-il ?", type: "text" },
       { id: "themes", label: "Quels thèmes semblent résonner ?", type: "chips", options: ["Rejet", "Abandon", "Injustice", "Dévalorisation", "Impuissance", "Manque de place", "Silence", "Insécurité", "Non-choix", "Séparation", "Autre"] },
       { id: "belief", label: "Quelle phrase intérieure semble se cacher derrière ?", type: "text", hint: "Par exemple : « Je ne suis pas… », « Je n’ai pas le droit de… », « Je dois toujours… »" },
+      { id: "beliefAxis", label: "Cette phrase semble surtout limiter…", type: "chips", options: ["Ce que je peux faire", "Ce dont je me crois capable", "Ce que je m’autorise", "Je ne sais pas encore"] },
       { id: "need", label: "Quel besoin important n’est pas suffisamment entendu ?", type: "text" }
     ]
   },
@@ -61,7 +63,9 @@ const STEPS = [
       { id: "change", label: "Qu’est-ce qui a changé depuis le début de la séance ?", type: "text" },
       { id: "nowBody", label: "Comment votre corps se sent-il maintenant ?", type: "text" },
       { id: "takeaway", label: "Quelle compréhension souhaitez-vous retenir ?", type: "text" },
+      { id: "successEvidence", label: "Quel signe concret vous montrera qu’un premier changement est réellement en cours ?", type: "text", hint: "Quelque chose que vous pourrez observer, entendre, ressentir ou faire." },
       { id: "action", label: "Quelle petite action pourrait soutenir ce changement ?", type: "text" },
+      { id: "commitment", label: "À quel point vous sentez-vous prêt à réaliser cette action ?", type: "scale" },
       { id: "afterNeed", label: "De quoi avez-vous besoin après cette séance ?", type: "text" },
       { id: "endIntensity", label: "Quelle intensité reste-t-il maintenant ?", type: "scale" }
     ]
@@ -81,12 +85,14 @@ const DEEPENERS = {
   2: [
     { id: "commonThread", after: "recurrence", label: "Qu’est-ce qui semble commun aux différentes fois où cela se produit ?", when: a => includesAny(a.recurrence, ["Cela revient parfois", "Cela revient souvent"]) },
     { id: "protectionPurpose", after: "protection", label: "À quoi ce fonctionnement essaie-t-il de vous protéger ?", when: a => hasAny(a.protection) },
-    { id: "protectionCost", after: "protectionPurpose", label: "Et aujourd’hui, qu’est-ce que cette protection vous coûte ou vous empêche de vivre ?", when: a => hasText(a.protectionPurpose) }
+    { id: "protectionCost", after: "protectionPurpose", label: "Et aujourd’hui, qu’est-ce que cette protection vous coûte ou vous empêche de vivre ?", when: a => hasText(a.protectionPurpose) },
+    { id: "shadowResource", after: "irritation", label: "Sans excuser ce qui vous dérange, quelle qualité utile pourrait se cacher derrière ce trait s’il était exprimé avec mesure ?", when: a => hasText(a.irritation) }
   ],
   3: [
     { id: "ruleFear", after: "belief", label: "Que craignez-vous qu’il arrive si vous ne respectez plus cette règle intérieure ?", when: a => containsRule(a.belief) },
     { id: "exception", after: "belief", label: "Pouvez-vous retrouver une exception, même petite, où cela ne s’est pas passé ainsi ?", when: a => containsAbsolute(a.belief) },
     { id: "beliefOrigin", after: "belief", label: "Cette phrase vous appartient-elle vraiment, ou semble-t-elle venir de quelque part ?", when: a => hasText(a.belief) },
+    { id: "beliefUsefulness", after: "beliefAxis", label: "Aujourd’hui, cette croyance vous protège-t-elle encore ou vous éloigne-t-elle surtout de ce que vous souhaitez ?", when: a => hasAny(a.beliefAxis) },
     { id: "deepNeed", after: "need", label: "Si ce besoin était vraiment entendu, qu’est-ce que cela changerait dans votre manière d’être ou d’agir ?", when: a => hasText(a.need) }
   ],
   4: [
@@ -97,6 +103,7 @@ const DEEPENERS = {
   5: [
     { id: "actionSmall", after: "action", label: "Comment rendre cette action assez petite et simple pour qu’elle soit réellement faisable ?", when: a => hasText(a.action) },
     { id: "actionWhen", after: "actionSmall", label: "Quand précisément souhaitez-vous faire ce premier pas ?", when: a => hasText(a.actionSmall) },
+    { id: "actionAdjustment", after: "commitment", label: "Qu’est-ce qui rendrait cette action plus simple ou plus juste pour vous ?", when: a => a.commitment !== undefined && Number.isFinite(+a.commitment) && +a.commitment < 7 },
     { id: "support", after: "afterNeed", label: "De quel soutien ou de quelle ressource disposez-vous déjà pour la suite ?", when: a => hasText(a.afterNeed) }
   ]
 };
@@ -108,6 +115,9 @@ function includesAny(v, values) { return (Array.isArray(v) ? v : [v]).some(x => 
 function normalized(v) { return textValue(v).toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
 function containsRule(v) { return /\b(il faut|je dois|je ne dois|oblige|obligation|pas le droit)\b/.test(normalized(v)); }
 function containsAbsolute(v) { return /\b(toujours|jamais|tout le monde|personne|aucun|rien|impossible)\b/.test(normalized(v)); }
+function containsMindReading(v) { return /\b(il|elle|ils|elles|on) (pense|pensent|croit|croient|veut|veulent|sait|savent|juge|jugent)\b/.test(normalized(v)); }
+function containsCauseEffect(v) { return /\b(il|elle|ils|elles|ca|cela) me (rend|fait|force|oblige|empeche)\b/.test(normalized(v)); }
+function isNegativeGoal(v) { return /\b(ne plus|plus jamais|arreter de|eviter de|ne pas|moins de)\b/.test(normalized(v)); }
 
 const SIGNALS = [
   {
@@ -179,10 +189,10 @@ function leadingSignal(a = state.answers) {
 
 function personalizedDeepeners(stepIndex) {
   const signal = leadingSignal();
-  if (!signal) return [];
+  const questions = [];
 
-  if (stepIndex === 0 && hasText(state.answers.reason)) {
-    return [{
+  if (stepIndex === 0 && signal && hasText(state.answers.reason)) {
+    questions.push({
       id: `signal_${signal.id}`,
       after: "reason",
       label: signal.question,
@@ -190,11 +200,28 @@ function personalizedDeepeners(stepIndex) {
       adaptive: true,
       personalized: true,
       signal: signal.id
-    }];
+    });
   }
 
-  if (stepIndex === 3 && hasText(state.answers.coreWord)) {
-    return [{
+  if (stepIndex === 0) {
+    const firstWords = [state.answers.reason, state.answers.difficulty].filter(Boolean).join(" ");
+    if (containsAbsolute(firstWords)) {
+      questions.push({ id: "languageException", after: hasText(state.answers.difficulty) ? "difficulty" : "reason", label: "Vous employez un mot très général comme « toujours », « jamais » ou « personne ». Existe-t-il une exception, même petite ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
+    } else if (containsMindReading(firstWords)) {
+      questions.push({ id: "languageEvidence", after: hasText(state.answers.difficulty) ? "difficulty" : "reason", label: "Quels faits observables vous font penser que l’autre pense, veut ou juge cela ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
+    } else if (containsCauseEffect(firstWords)) {
+      questions.push({ id: "languageAgency", after: hasText(state.answers.difficulty) ? "difficulty" : "reason", label: "Entre ce que l’autre fait et ce que vous ressentez, quelle interprétation ou pensée apparaît en vous ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
+    }
+
+    if (isNegativeGoal(state.answers.intention)) {
+      questions.push({ id: "positiveOutcome", after: "intention", label: "Si vous ne viviez plus cela, que voudriez-vous vivre, ressentir ou faire précisément à la place ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
+    } else if (hasText(state.answers.intention)) {
+      questions.push({ id: "resultMeaning", after: "intention", label: "Si cette situation souhaitée devenait réelle, qu’est-ce que cela vous apporterait d’important ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
+    }
+  }
+
+  if (stepIndex === 3 && signal && hasText(state.answers.coreWord)) {
+    questions.push({
       id: `signalNeed_${signal.id}`,
       after: "coreWord",
       label: `En lien avec ${signal.name}, qu’est-ce que vous cherchez surtout à préserver ou à retrouver ?`,
@@ -202,16 +229,21 @@ function personalizedDeepeners(stepIndex) {
       adaptive: true,
       personalized: true,
       signal: signal.id
-    }];
+    });
   }
 
-  return [];
+  if (stepIndex === 0 && hasText(state.answers.intention)) {
+    const outcomeQuestion = questions.find(q => q.id === "positiveOutcome" || q.id === "resultMeaning");
+    return [questions.find(q => q.id.startsWith("signal_")), outcomeQuestion].filter(Boolean);
+  }
+
+  return questions.slice(0, 2);
 }
 
 function activeQuestions(stepIndex) {
   const base = STEPS[stepIndex].questions;
   const tailored = personalizedDeepeners(stepIndex);
-  const genericLimit = Math.max(1, 2 - tailored.length);
+  const genericLimit = Math.max(1, 3 - tailored.length);
   const generic = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers)).slice(0, genericLimit).map(q => ({ ...q, type: "text", adaptive: true }));
   const eligible = [...tailored, ...generic];
   const result = [];
@@ -365,7 +397,11 @@ function guideReaction(q) {
   const v = answerText(q);
   if (!v) return "Vous avez choisi de ne pas répondre. C’est possible : gardez seulement ce qui vous paraît utile.";
 
+  if (q.id === "resultMeaning") return "Vous venez de préciser ce que le changement représente réellement pour vous, au-delà du premier objectif formulé.";
+  if (q.id === "positiveOutcome") return "Votre souhait est maintenant formulé comme une direction à construire, et pas uniquement comme une difficulté à faire disparaître.";
+
   if (q.personalized) {
+    if (q.languageProbe) return "Cette précision aide à distinguer les faits, les interprétations et les règles intérieures. Vous pouvez ainsi retrouver davantage de choix.";
     const signal = SIGNALS.find(item => item.id === q.signal);
     return signal
       ? `Votre réponse précise une piste autour de <strong>${escapeHtml(signal.name)}</strong>. Ce n’est pas une conclusion sur vous : c’est un fil que vous pourrez confirmer, nuancer ou laisser de côté.`
@@ -379,6 +415,12 @@ function guideReaction(q) {
   if (q.id === "recurrence" && v !== "Situation isolée") return "Le fait que cela revienne peut signaler un fonctionnement de protection devenu familier. Observons-le sans chercher de coupable.";
   if (q.id === "protection") return `Cette réaction — <strong>${escapeHtml(v)}</strong> — a probablement essayé de vous protéger. Voyons maintenant si elle vous convient encore.`;
   if (q.id === "belief") return "Cette phrase intérieure n’est pas une vérité sur vous. Elle peut être une ancienne conclusion que vous pouvez regarder avec plus de recul.";
+  if (q.id === "shadowResource") return "Vous explorez ici une polarité, sans nier les faits ni vous attribuer ce qui appartient à l’autre. Gardez seulement la qualité qui vous paraît juste et utile.";
+  if (q.id === "beliefAxis") return "Vous repérez si cette croyance agit surtout sur votre pouvoir d’agir, votre sentiment de capacité ou votre permission intérieure.";
+  if (q.id === "beliefUsefulness") return "Une croyance peut avoir été protectrice et devenir limitante. Observer son effet actuel permet de choisir avec plus de conscience.";
+  if (q.id === "successEvidence") return "Ce signe concret vous permettra de reconnaître le changement dans la réalité, et pas seulement dans l’intention.";
+  if (q.id === "commitment") return +v >= 7 ? "Votre niveau d’engagement semble suffisant pour tester ce premier pas." : "Votre engagement mérite peut-être un ajustement : une action plus petite ou plus personnelle sera souvent plus durable.";
+  if (q.id === "actionAdjustment") return "Vous adaptez l’action à votre réalité. Un pas simple et réalisable vaut mieux qu’un engagement idéal impossible à tenir.";
   if (q.id === "personalImpact") return "Vous distinguez maintenant la situation extérieure de ce qu’elle vient toucher plus profondément en vous.";
   if (q.id === "implication") return "Cette crainte montre pourquoi la situation prend autant de place. La nommer permet de ne plus la laisser agir entièrement dans l’ombre.";
   if (q.id === "emotionMessage") return "Vous venez d’écouter le message possible de ce ressenti, sans lui demander de disparaître.";
@@ -548,7 +590,9 @@ function renderSummary() {
     </div>
     <div class="insight">
       <p style="margin: 0 0 10px 0; font-size: 1.05rem;"><strong>Votre phrase d'ancrage :</strong><br>${mantraText}</p>
-      ${a.action ? `Premier mouvement choisi : <strong>${escapeHtml(a.action)}</strong>` : ""}
+      ${a.action ? `<p><b>Premier mouvement choisi :</b> ${escapeHtml(a.action)}</p>` : ""}
+      ${a.successEvidence ? `<p><b>Le signe qui permettra de reconnaître le changement :</b> ${escapeHtml(a.successEvidence)}</p>` : ""}
+      ${a.commitment !== undefined ? `<p><b>Engagement ressenti :</b> ${escapeHtml(a.commitment)} / 10${+a.commitment < 7 ? " — l’action mérite d’être simplifiée ou ajustée." : ""}</p>` : ""}
     </div>
     ${personalReading}`;
 
