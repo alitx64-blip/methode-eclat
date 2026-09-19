@@ -191,7 +191,7 @@ const SIGNALS = [
   },
   {
     id: "overload", name: "la fatigue et la surcharge",
-    words: ["fatigue", "epuise", "deborde", "charge", "trop", "pression", "stress", "souffle", "reposer"],
+    words: ["fatigue", "epuise", "deborde", "surcharge", "charge mentale", "trop a porter", "pression", "stress", "souffle", "reposer"],
     question: "Parmi tout ce que vous portez, qu’est-ce qui ne devrait plus reposer uniquement sur vous ?",
     resource: "alléger, prioriser et reconnaître vos limites avant l’épuisement"
   },
@@ -441,8 +441,19 @@ function activeQuestions(stepIndex) {
   };
   genericRoots.forEach(addGenericChain);
   const eligible = [...tailored, ...generic];
+  state.adaptiveQuestionBank ||= {};
+  const remembered = Array.isArray(state.adaptiveQuestionBank[stepIndex]) ? state.adaptiveQuestionBank[stepIndex] : [];
+  const bank = new Map(remembered.map(question => [question.id, question]));
+  eligible.forEach(question => bank.set(question.id, { ...question, when: undefined }));
+  state.adaptiveQuestionBank[stepIndex] = [...bank.values()];
+  const preserved = [...bank.values()].filter(question =>
+    hasText(state.answers[question.id]) ||
+    state.currentQuestionId === question.id ||
+    state.feedbackQuestionId === question.id
+  );
+  const stableEligible = [...new Map([...eligible, ...preserved].map(question => [question.id, question])).values()];
   const result = [];
-  const addAfter = id => eligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
+  const addAfter = id => stableEligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
   base.forEach(q => { result.push(q); addAfter(q.id); });
   return result;
 }
@@ -494,6 +505,8 @@ function freshState() {
     currentQuestionId: null,
     feedbackQuestionId: null,
     feedback: false,
+    adaptiveQuestionBank: {},
+    progressMax: 0,
     name: "",
     answers: {},
     startedAt: new Date().toISOString(),
@@ -905,7 +918,7 @@ function buildConclusion(a) {
     : `Votre point de conscience : le changement ne consiste pas à supprimer une partie de vous, mais à comprendre ce qu’elle protège afin de retrouver davantage de choix.`;
 
   const point = choice
-    ? `Je peux reconnaître ce qui m’a protégé, sans le laisser décider à ma place, et commencer à ${embeddedAnswer(choice)}.`
+    ? `Je peux reconnaître ce qui m’a protégé, sans le laisser décider à ma place, et avancer vers ce choix : « ${shortAnswer(choice)} ».`
     : resource
       ? `Je peux reconnaître ce qui m’a protégé et m’appuyer maintenant sur ${embeddedAnswer(resource)}.`
       : `Je peux accueillir ce que je comprends aujourd’hui et choisir un premier mouvement plus juste pour moi.`;
@@ -918,8 +931,8 @@ function buildConclusion(a) {
   const fearCore = firstMeaningful(a.fearCore, a.fearImplication4, a.fearImplication3, a.fearImplication2, a.fearImplication1);
   const narrative = [
     `${opening ? `Vous partez de « ${shortAnswer(opening, 155)} »` : "Vous avez décrit une situation qui compte pour vous"}${trigger ? `, qui semble notamment se réactiver lorsque « ${shortAnswer(trigger, 115)} »` : ""}. ${felt ? `Vous y associez « ${shortAnswer(felt, 105)} »` : "Vous avez pris le temps d’observer ce qui se présente"}${body ? `, avec un écho dans ${body.toLocaleLowerCase("fr")}` : ""}. Ces éléments rapprochent la situation, l’émotion et le corps sans prétendre expliquer automatiquement leur cause.`,
-    `${protection ? `Quand cela arrive, vous dites : « ${shortAnswer(protection, 90)} »` : "Une manière de vous protéger apparaît dans vos réponses"}. ${protectionGoal ? `Il semble que cette réaction cherche à ${embeddedAnswer(protectionGoal, 125)}.` : ""}${cost ? ` En même temps, vous constatez ce coût : « ${shortAnswer(cost, 145)} ».` : ""}${belief ? ` La phrase intérieure « ${shortAnswer(belief, 105)} » pourrait contribuer à maintenir ce mouvement ; elle reste une hypothèse à vérifier, et non une vérité sur vous.` : ""}${fearCore ? ` En suivant le chemin de la peur, l’enjeu que vos mots font apparaître est « ${shortAnswer(fearCore, 130)} ».` : ""} ${tensionReading(a)}`.trim(),
-    `${need ? `Sous cette protection, vous nommez un besoin de ${embeddedAnswer(need, 110)}` : "Votre exploration ouvre un besoin à préciser"}${value ? ` et une valeur importante : ${embeddedAnswer(value, 90)}` : ""}. ${resource ? `Vous disposez déjà de cette ressource : ${embeddedAnswer(resource, 115)}.` : ""}${choice ? ` Une piste pourrait être de vous en servir pour « ${shortAnswer(choice, 125)} »` : ""}${action ? `, en commençant par « ${shortAnswer(action, 125)} »` : ""}. Si cela résonne pour vous, le nouveau choix n’aurait donc pas à nier ce qui vous protège, mais à lui offrir une réponse plus ajustée à ce dont vous avez besoin aujourd’hui.`
+    `${protection ? `Quand cela arrive, vous dites : « ${shortAnswer(protection, 90)} »` : "Une manière de vous protéger apparaît dans vos réponses"}. ${protectionGoal ? `Vos mots lui donnent cette fonction protectrice : « ${shortAnswer(protectionGoal, 125)} ».` : ""}${cost ? ` En même temps, vous constatez ce coût : « ${shortAnswer(cost, 145)} ».` : ""}${belief ? ` La phrase intérieure « ${shortAnswer(belief, 105)} » pourrait contribuer à maintenir ce mouvement ; elle reste une hypothèse à vérifier, et non une vérité sur vous.` : ""}${fearCore ? ` En suivant le chemin de la peur, l’enjeu que vos mots font apparaître est « ${shortAnswer(fearCore, 130)} ».` : ""} ${tensionReading(a)}`.trim(),
+    `${need ? `Sous cette protection, vous nommez ce besoin : « ${shortAnswer(need, 110)} »` : "Votre exploration ouvre un besoin à préciser"}${value ? ` et cette valeur importante : « ${shortAnswer(value, 90)} »` : ""}. ${resource ? `Vous disposez déjà de cette ressource : ${embeddedAnswer(resource, 115)}.` : ""}${choice ? ` Une piste pourrait être de vous en servir pour « ${shortAnswer(choice, 125)} »` : ""}${action ? `, en commençant par « ${shortAnswer(action, 125)} »` : ""}. Si cela résonne pour vous, le nouveau choix n’aurait donc pas à nier ce qui vous protège, mais à lui offrir une réponse plus ajustée à ce dont vous avez besoin aujourd’hui.`
   ];
 
   return {
@@ -1141,7 +1154,9 @@ function renderStep() {
   let done = STEPS.slice(0, state.step).reduce((n, x, idx) => n + activeQuestions(idx).length, 0) + state.question + 1;
 
   $("#stepNumber").textContent = `${s.title} · question ${state.question + 1}/${currentQuestions.length}`;
-  $("#progressBar").style.width = `${(done / total) * 100}%`;
+  const rawProgress = (done / total) * 100;
+  state.progressMax = Math.max(Number(state.progressMax) || 0, rawProgress);
+  $("#progressBar").style.width = `${state.progressMax}%`;
 
   const pause = (state.step === 2 && state.question === 0) ? `
     <div class="pause-box">
@@ -1216,7 +1231,7 @@ function renderSummary(complete = false) {
 
   const userNeed = a.need || a.immediateNeed || "mon besoin profond";
   const userQuality = a.quality || a.sensitivity || "mes ressources";
-  const mantraText = `« Aujourd'hui, je choisis d'honorer mon besoin de <strong>${escapeHtml(userNeed)}</strong> en m'appuyant sur ma capacité de <strong>${escapeHtml(userQuality)}</strong>. »`;
+  const mantraText = `« Aujourd'hui, je choisis d'honorer ce besoin : <strong>${escapeHtml(userNeed)}</strong>, en m'appuyant sur cette ressource : <strong>${escapeHtml(userQuality)}</strong>. »`;
 
   const signals = detectedSignals(a).slice(0, 3);
   const signal = signals[0] || null;
