@@ -70,4 +70,31 @@ $("#resumeSession").onclick=()=>start(false);$("#previousBtn").onclick=()=>{coll
 $("#summaryBtn").onclick=renderSummary;$("#backToSession").onclick=()=>{show(session);renderStep()};$("#printBtn").onclick=()=>window.print();$("#homeBtn").onclick=()=>show(welcome);$("#sessionName").oninput=e=>{state.name=e.target.value;save()};
 $("#resetBtn").onclick=()=>{if(confirm("Effacer définitivement toutes les réponses de cette séance ?")){localStorage.removeItem(KEY);state={step:0,name:"",answers:{},updatedAt:null};$("#resumeSession").hidden=true;show(welcome)}};
 const dlg=$("#privacyDialog");$("#privacyBtn").onclick=()=>dlg.showModal();dlg.querySelector(".dialog-close").onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
-load();
+const ACCESS_KEY="eclat-access-v1";
+const ACCESS_HASH="62d8aecf0bd67f1fe8deb4b743cb48bd516747ce39e972d9b428dbd76e3fb5f3";
+const gate=$("#accessGate"), accessForm=$("#accessForm"), accessPassword=$("#accessPassword"), accessError=$("#accessError");
+function unlockAccess(remember=false){
+  document.body.classList.remove("eclat-locked");
+  gate.hidden=true;
+  (remember?localStorage:sessionStorage).setItem(ACCESS_KEY,"granted");
+  load();
+}
+async function hashAccess(value){
+  const bytes=new TextEncoder().encode(value);
+  const digest=await crypto.subtle.digest("SHA-256",bytes);
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+if(localStorage.getItem(ACCESS_KEY)==="granted"||sessionStorage.getItem(ACCESS_KEY)==="granted"){
+  unlockAccess(false);
+}else{
+  accessForm.addEventListener("submit",async e=>{
+    e.preventDefault();
+    accessError.textContent="";
+    if(await hashAccess(accessPassword.value)===ACCESS_HASH){
+      unlockAccess($("#rememberAccess").checked);
+    }else{
+      accessError.textContent="Mot de passe incorrect.";
+      accessPassword.select();
+    }
+  });
+}
