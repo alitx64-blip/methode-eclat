@@ -914,6 +914,69 @@ function buildConclusion(a) {
   };
 }
 
+function usefulAnswersForAI(a) {
+  const fields = {
+    situation: a.reason,
+    difficulte: a.difficulty,
+    intention: a.intention,
+    emotions: a.emotions,
+    ressenti: a.emotionWords,
+    corps: a.body,
+    ressentiCorporel: firstMeaningful(a.bodySignal, a.nowBody),
+    declencheurs: a.triggers,
+    repetitions: firstMeaningful(a.commonThread, a.recurrence),
+    protection: a.protection,
+    fonctionProtection: a.protectionPurpose,
+    coutProtection: firstMeaningful(a.protectionCost, a.heldBack),
+    croyance: a.belief,
+    besoin: firstMeaningful(a.need, a.immediateNeed, a.pastNeed),
+    valeur: a.value,
+    peurProfonde: firstMeaningful(a.fearCore, a.fearImplication4, a.fearImplication3, a.fearImplication2, a.fearImplication1),
+    dialogueInterieur: a.partsDialogue,
+    mouvementRespectantLesDeuxParts: a.partsMovement,
+    ressource: firstMeaningful(a.quality, a.sensitivity, a.offering),
+    nouveauChoix: firstMeaningful(a.newChoice, a.opposite),
+    action: firstMeaningful(a.actionSmall, a.action),
+    evolution: firstMeaningful(a.change, a.takeaway),
+    intensiteDebut: a.startIntensity,
+    intensiteFin: a.endIntensity
+  };
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)));
+}
+
+async function setupAISummary(a) {
+  const panel = $("#aiSummaryPanel");
+  const button = $("#generateAISummary");
+  const result = $("#aiSummaryResult");
+  if (!panel || !button || !result || severeDistressDetected(a)) return;
+
+  const status = await fetch("/api/synthese", { headers: { accept: "application/json" } }).then(response => response.ok ? response.json() : null).catch(() => null);
+  if (!status?.enabled) return;
+  panel.hidden = false;
+
+  button.onclick = async () => {
+    button.disabled = true;
+    button.textContent = "Génération en cours…";
+    result.hidden = true;
+    try {
+      const response = await fetch("/api/synthese", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ responses: usefulAnswersForAI(a) })
+      });
+      if (!response.ok) throw new Error("unavailable");
+      const data = await response.json();
+      if (!data.summary) throw new Error("empty");
+      result.innerHTML = `<h3>Synthèse approfondie</h3><div class="ai-summary-text">${data.summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
+    } catch {
+      result.innerHTML = `<p class="ai-summary-error">Nous n’avons pas pu générer la synthèse approfondie. Votre synthèse ÉCLAT reste disponible ci-dessus.</p>`;
+    }
+    result.hidden = false;
+    button.disabled = false;
+    button.textContent = "✨ Régénérer la synthèse approfondie";
+  };
+}
+
 function guideReaction(q) {
   const v = answerText(q);
   if (!v) return "Vous avez choisi de ne pas répondre. C’est possible : gardez seulement ce qui vous paraît utile.";
@@ -1177,7 +1240,7 @@ function renderSummary(complete = false) {
   conclusionCard.className = "eclat-conclusion";
   conclusionCard.innerHTML = `
     <div class="conclusion-title">
-      <div><p class="eyebrow">La lecture de votre parcours</p><h2>Votre conclusion ÉCLAT</h2></div>
+      <div><p class="eyebrow">La lecture de votre parcours</p><h2>Synthèse ÉCLAT</h2></div>
       <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
     </div>
     <div class="conclusion-reading">
@@ -1187,8 +1250,14 @@ function renderSummary(complete = false) {
     <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
     <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
     ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
-    <p class="conclusion-source">${conclusion.insufficient ? "ÉCLAT préfère suspendre sa lecture plutôt que compléter vos réponses à votre place." : "Cette lecture croise uniquement les éléments formulés dans vos réponses."} Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>`;
+    <p class="conclusion-source">${conclusion.insufficient ? "ÉCLAT préfère suspendre sa lecture plutôt que compléter vos réponses à votre place." : "Cette lecture croise uniquement les éléments formulés dans vos réponses."} Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>
+    <div class="ai-summary-panel" id="aiSummaryPanel" hidden>
+      <button class="primary" id="generateAISummary" type="button">✨ Générer une synthèse approfondie</button>
+      <p class="ai-summary-note">Un seul appel facultatif sera effectué. Votre synthèse ÉCLAT reste disponible quoi qu’il arrive.</p>
+      <div class="ai-summary-result" id="aiSummaryResult" aria-live="polite" hidden></div>
+    </div>`;
   $("#transformationCard").after(conclusionCard);
+  setupAISummary(a);
 
   $("#summaryContent").innerHTML = STEPS.map((s, i) => `
     <article class="summary-card">
