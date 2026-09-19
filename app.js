@@ -114,7 +114,7 @@ function textValue(v) { return Array.isArray(v) ? v.join(" ") : String(v ?? "");
 function hasText(v) { return textValue(v).trim().length >= 3; }
 function hasAny(v) { return Array.isArray(v) ? v.length > 0 : hasText(v); }
 function includesAny(v, values) { return (Array.isArray(v) ? v : [v]).some(x => values.includes(x)); }
-function normalized(v) { return textValue(v).toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+function normalized(v) { return textValue(v).toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[’']/g, " "); }
 function containsRule(v) { return /\b(il faut|je dois|je ne dois|oblige|obligation|pas le droit)\b/.test(normalized(v)); }
 function containsAbsolute(v) { return /\b(toujours|jamais|tout le monde|personne|aucun|rien|impossible)\b/.test(normalized(v)); }
 function containsMindReading(v) { return /\b(il|elle|ils|elles|on) (pense|pensent|croit|croient|veut|veulent|sait|savent|juge|jugent)\b/.test(normalized(v)); }
@@ -243,6 +243,12 @@ function severeDistressDetected(a = state.answers) {
     /\b(?:envie|intention) d en finir\b/,
     /\bje ne veux plus vivre\b/,
     /\bje veux mourir\b/,
+    /\b(?:je veux|j aimerais|envie de) disparaitre\b/,
+    /\bje pense au suicide\b/,
+    /\bje veux me faire du mal\b/,
+    /\bje vais me faire du mal\b/,
+    /\bje ne veux plus etre la\b/,
+    /\bje prefere mourir\b/,
     /\bje suis en danger immediat\b/
   ].some(pattern => pattern.test(text));
 }
@@ -950,6 +956,18 @@ async function setupAISummary(a) {
   const result = $("#aiSummaryResult");
   if (!panel || !button || !result || severeDistressDetected(a)) return;
 
+  const showSummary = summary => {
+    result.innerHTML = `<h3>Synthèse approfondie</h3><div class="ai-summary-text">${summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
+    result.hidden = false;
+    button.hidden = true;
+  };
+
+  if (state.aiSummary) {
+    panel.hidden = false;
+    showSummary(state.aiSummary);
+    return;
+  }
+
   const status = await fetch("/api/synthese", { headers: { accept: "application/json" } }).then(response => response.ok ? response.json() : null).catch(() => null);
   if (!status?.enabled) return;
   panel.hidden = false;
@@ -967,13 +985,23 @@ async function setupAISummary(a) {
       if (!response.ok) throw new Error("unavailable");
       const data = await response.json();
       if (!data.summary) throw new Error("empty");
-      result.innerHTML = `<h3>Synthèse approfondie</h3><div class="ai-summary-text">${data.summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
+      state.aiSummary = data.summary;
+      state.aiSummaryCreatedAt = new Date().toISOString();
+      const archived = history.find(item => item.id === state.id);
+      if (archived) {
+        archived.aiSummary = state.aiSummary;
+        archived.aiSummaryCreatedAt = state.aiSummaryCreatedAt;
+        saveHistory();
+      }
+      save();
+      showSummary(data.summary);
+      return;
     } catch {
       result.innerHTML = `<p class="ai-summary-error">Nous n’avons pas pu générer la synthèse approfondie. Votre synthèse ÉCLAT reste disponible ci-dessus.</p>`;
     }
     result.hidden = false;
     button.disabled = false;
-    button.textContent = "✨ Régénérer la synthèse approfondie";
+    button.textContent = "✨ Générer une synthèse approfondie";
   };
 }
 
@@ -1074,7 +1102,7 @@ function renderStep() {
       <div class="conversation">
         <div class="pause-box">
           <span>♡</span>
-          <div><b>ÉCLAT s’arrête ici pour ne pas pousser l’introspection.</b><br>Ce que vous avez écrit appelle un soutien humain immédiat. Ne restez pas seul·e : contactez maintenant une personne de confiance, un professionnel, ou les urgences (15 ou 112 en France ; le numéro d’urgence local si vous êtes ailleurs). Si vous êtes en danger, éloignez-vous de tout moyen de vous faire du mal et allez vers une personne ou un lieu sûr.</div>
+          <div><b>ÉCLAT s’arrête ici pour ne pas pousser l’introspection.</b><br>Ce que vous avez écrit appelle un soutien humain immédiat. Ne restez pas seul·e : contactez maintenant une personne de confiance, un professionnel, le 3114 en France (gratuit, 24 h/24 et 7 j/7), ou les urgences au 15/112. Si vous êtes ailleurs, contactez le numéro d’urgence local. Si vous êtes en danger, éloignez-vous de tout moyen de vous faire du mal et allez vers une personne ou un lieu sûr.</div>
         </div>
       </div>`;
     $("#previousBtn").style.visibility = "visible";
