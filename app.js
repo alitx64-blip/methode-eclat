@@ -430,12 +430,33 @@ function activeQuestions(stepIndex) {
   const base = STEPS[stepIndex].questions;
   const tailored = personalizedDeepeners(stepIndex);
   const genericLimit = Math.max(0, 2 - tailored.length);
-  const generic = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers)).slice(0, genericLimit).map(q => ({ ...q, type: "text", adaptive: true }));
+  const genericCandidates = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers));
+  const baseIds = new Set(base.map(q => q.id));
+  const genericRoots = genericCandidates.filter(q => baseIds.has(q.after)).slice(0, genericLimit);
+  const generic = [];
+  const addGenericChain = question => {
+    if (!question || generic.some(item => item.id === question.id)) return;
+    generic.push({ ...question, type: "text", adaptive: true });
+    genericCandidates.filter(candidate => candidate.after === question.id).forEach(addGenericChain);
+  };
+  genericRoots.forEach(addGenericChain);
   const eligible = [...tailored, ...generic];
   const result = [];
   const addAfter = id => eligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
   base.forEach(q => { result.push(q); addAfter(q.id); });
   return result;
+}
+
+function resolvedQuestionIndex(questions, questionId, fallbackIndex = 0) {
+  const identified = questionId ? questions.findIndex(question => question.id === questionId) : -1;
+  if (identified >= 0) return identified;
+  return Math.max(0, Math.min(Number.isInteger(fallbackIndex) ? fallbackIndex : 0, questions.length - 1));
+}
+
+function selectQuestion(questions, index) {
+  const safeIndex = Math.max(0, Math.min(index, questions.length - 1));
+  state.question = safeIndex;
+  state.currentQuestionId = questions[safeIndex]?.id || null;
 }
 
 const GUIDANCE = [
@@ -470,6 +491,8 @@ function freshState() {
     id: `eclat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     step: 0,
     question: 0,
+    currentQuestionId: null,
+    feedbackQuestionId: null,
     feedback: false,
     name: "",
     answers: {},
@@ -1093,6 +1116,8 @@ function renderStep() {
 
   const s = STEPS[state.step];
   const currentQuestions = activeQuestions(state.step);
+  const anchorId = state.feedback ? (state.feedbackQuestionId || state.currentQuestionId) : state.currentQuestionId;
+  selectQuestion(currentQuestions, resolvedQuestionIndex(currentQuestions, anchorId, state.question));
 
   $("#nextBtn").style.display = "";
   if (severeDistressDetected()) {
@@ -1108,10 +1133,6 @@ function renderStep() {
     $("#previousBtn").style.visibility = "visible";
     $("#nextBtn").style.display = "none";
     return;
-  }
-
-  if (state.question >= currentQuestions.length) {
-    state.question = currentQuestions.length - 1;
   }
 
   const q = currentQuestions[state.question];
@@ -1383,32 +1404,41 @@ $("#resumeSession").onclick = () => start(false);
 $("#previousBtn").onclick = () => {
   if (state.feedback) {
     state.feedback = false;
-  } else if (state.question > 0) {
-    state.question--;
-  } else if (state.step > 0) {
-    state.step--;
-    state.question = activeQuestions(state.step).length - 1;
+    state.feedbackQuestionId = null;
+  } else {
+    const currentQuestions = activeQuestions(state.step);
+    const currentIndex = resolvedQuestionIndex(currentQuestions, state.currentQuestionId, state.question);
+    if (currentIndex > 0) {
+      selectQuestion(currentQuestions, currentIndex - 1);
+    } else if (state.step > 0) {
+      state.step--;
+      const previousQuestions = activeQuestions(state.step);
+      selectQuestion(previousQuestions, previousQuestions.length - 1);
+    }
   }
   save();
   renderStep();
 };
 
 $("#nextBtn").onclick = () => {
-  const currentQuestions = activeQuestions(state.step);
-
   if (!state.feedback) {
+    state.feedbackQuestionId = state.currentQuestionId || activeQuestions(state.step)[state.question]?.id || null;
     state.feedback = true;
     save();
     renderStep();
     return;
   }
 
+  const currentQuestions = activeQuestions(state.step);
+  const currentIndex = resolvedQuestionIndex(currentQuestions, state.feedbackQuestionId || state.currentQuestionId, state.question);
   state.feedback = false;
-  if (state.question < currentQuestions.length - 1) {
-    state.question++;
+  state.feedbackQuestionId = null;
+  if (currentIndex < currentQuestions.length - 1) {
+    selectQuestion(currentQuestions, currentIndex + 1);
   } else if (state.step < STEPS.length - 1) {
     state.step++;
-    state.question = 0;
+    const nextQuestions = activeQuestions(state.step);
+    selectQuestion(nextQuestions, 0);
   } else {
     return renderSummary(true);
   }
