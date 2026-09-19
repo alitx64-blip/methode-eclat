@@ -31,7 +31,7 @@ export async function onRequest(context) {
   // La protection ne s'active qu'une fois les deux secrets Cloudflare configurés.
   if (!env.ECLAT_PASSWORD || !env.ECLAT_SESSION_SECRET) return context.next();
 
-  if (url.pathname === "/connexion.html" || url.pathname.startsWith("/api/auth/")) return context.next();
+  if (url.pathname === "/connexion" || url.pathname === "/connexion.html" || url.pathname.startsWith("/api/auth/")) return context.next();
 
   const token = readCookie(request, "eclat_session");
   if (await validSession(token, env.ECLAT_SESSION_SECRET)) return context.next();
@@ -41,5 +41,5 @@ export async function onRequest(context) {
   }
 
   const destination = `${url.pathname}${url.search}`;
-  return Response.redirect(`${url.origin}/connexion.html?retour=${encodeURIComponent(destination)}`, 302);
+  return Response.redirect(`${url.origin}/connexion?retour=${encodeURIComponent(destination)}`, 302);
 }
