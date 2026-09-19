@@ -6,6 +6,10 @@
   <title>Mon parcours ÉCLAT — D’Âme & de Sens</title>
   <link rel="icon" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#10243e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <script type="module" src="bundle.js"></script>
 </head>
 <body>
@@ -95,6 +99,7 @@
         </div>
         <div class="summary-actions">
           <button class="secondary" id="backToSession" type="button">Modifier</button>
+          <button class="ghost" id="exportBtn" type="button">Exporter (.json)</button>
           <button class="primary" id="printBtn" type="button">Imprimer / PDF</button>
         </div>
       </div>
@@ -114,5 +119,12 @@
     <p>Elles sont conservées uniquement dans ce navigateur sur cet appareil.</p>
   </dialog>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW reg error:', err));
+      });
+    }
+  </script>
 </body>
 </html>
