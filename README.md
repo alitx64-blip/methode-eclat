@@ -4,8 +4,10 @@ Version autonome de l’application : elle s’adresse directement à la personn
 
 ## Confidentialité
 
-Les réponses sont enregistrées uniquement dans le stockage local du navigateur. Aucun serveur ni service d’analyse n’est utilisé.
+Les réponses sont enregistrées dans le stockage local du navigateur. La synthèse ÉCLAT native fonctionne entièrement sans service externe.
 
-## Publication GitHub Pages
+Une synthèse approfondie facultative peut être demandée à la fin du parcours. Dans ce cas seulement, les réponses utiles — sans le nom de la personne — transitent par une fonction Cloudflare vers un modèle OpenRouter explicitement gratuit. La fonction ne conserve pas les réponses et exige un fournisseur sans collecte de données et compatible Zero Data Retention. En cas d’indisponibilité, la synthèse native reste affichée.
 
-Le projet ne nécessite aucune compilation. La branche principale reste actuellement publiée ; cette version autonome est conservée séparément dans la branche `version-autonome`.
+## Publication Cloudflare Pages
+
+La version autonome est déployée depuis la branche `version-autonome`. Les secrets `ECLAT_PASSWORD`, `ECLAT_SESSION_SECRET` et `OPENROUTER_API_KEY` doivent être configurés dans Cloudflare. Sans les deux secrets de protection, le parcours reste fermé.
