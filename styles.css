@@ -840,6 +840,22 @@ main {
   margin-bottom: 22px;
 }
 
+.detected-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+
+.detected-themes span {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
 .transformation-flow {
   display: grid;
   grid-template-columns: 1fr auto 1fr auto 1fr;
@@ -873,6 +889,20 @@ main {
   padding-top: 20px;
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.82);
+}
+
+.personal-reading small {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--gold-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.personal-reading p {
+  margin: 8px 0 0;
 }
 
 /* Modales */
