@@ -15,7 +15,7 @@ const STEPS = [
     title: "C — Corps & émotions",
     intro: "Accueillir les signaux du corps et les émotions, sans chercher à les expliquer trop vite.",
     questions: [
-      { id: "emotions", label: "Lorsque vous pensez à cette situation, qu’est-ce qui apparaît ?", type: "chips", options: ["Colère", "Tristesse", "Peur", "Culpabilité", "Honte", "Impuissance", "Confusion", "Autre"] },
+      { id: "emotions", label: "Lorsque vous pensez à cette situation, qu’est-ce qui apparaît ?", type: "chips", options: ["Colère / agacement", "Tristesse", "Peur", "Anxiété / angoisse", "Culpabilité", "Honte", "Jalousie", "Impuissance", "Confusion", "Autre"] },
       { id: "emotionWords", label: "Avec vos propres mots, comment décririez-vous ce ressenti ?", type: "text" },
       { id: "body", label: "Où le ressentez-vous dans votre corps ?", type: "chips", options: ["Tête", "Gorge", "Poitrine", "Ventre", "Dos", "Épaules", "Bras / mains", "Jambes", "Partout", "Je ne sais pas"] },
       { id: "immediateNeed", label: "De quoi auriez-vous besoin à cet instant ?", type: "text" }
@@ -120,6 +120,45 @@ function containsAbsolute(v) { return /\b(toujours|jamais|tout le monde|personne
 function containsMindReading(v) { return /\b(il|elle|ils|elles|on) (pense|pensent|croit|croient|veut|veulent|sait|savent|juge|jugent)\b/.test(normalized(v)); }
 function containsCauseEffect(v) { return /\b(il|elle|ils|elles|ca|cela) me (rend|fait|force|oblige|empeche)\b/.test(normalized(v)); }
 function isNegativeGoal(v) { return /\b(ne plus|plus jamais|arreter de|eviter de|ne pas|moins de)\b/.test(normalized(v)); }
+
+const EMOTION_DEEPENERS = {
+  "Colère / agacement": {
+    id: "angerMessage",
+    label: "Quelle limite, règle ou valeur importante vous semble franchie dans cette situation ?"
+  },
+  "Tristesse": {
+    id: "sadnessLoss",
+    label: "Qu’est-ce qui semble perdu, terminé ou profondément regretté dans cette situation ?"
+  },
+  "Peur": {
+    id: "fearScenario",
+    label: "Quel est le scénario précis que vous redoutez, et quelle part vous paraît réellement probable aujourd’hui ?"
+  },
+  "Anxiété / angoisse": {
+    id: "anxietyConflict",
+    label: "Derrière cette anxiété, percevez-vous un danger précis ou deux besoins qui tirent dans des directions opposées ?"
+  },
+  "Culpabilité": {
+    id: "guiltShare",
+    label: "Quelle part vous appartient réellement, et quelle part ne dépend pas de vous ?"
+  },
+  "Honte": {
+    id: "shameLook",
+    label: "Sous quel regard vous sentez-vous diminué, et qu’aimeriez-vous pouvoir reconnaître de votre valeur malgré ce regard ?"
+  },
+  "Jalousie": {
+    id: "jealousyNeed",
+    label: "Sous la jalousie, qu’avez-vous peur de perdre ou de ne pas recevoir : une place, un lien, de la sécurité, de la reconnaissance ?"
+  },
+  "Impuissance": {
+    id: "agencyShare",
+    label: "Dans cette situation, qu’est-ce qui dépend de vous, même très peu, et qu’est-ce qui ne dépend pas de vous ?"
+  },
+  "Confusion": {
+    id: "factsAndStory",
+    label: "Quels sont les faits certains, puis quelles sont les interprétations ou suppositions qui s’y ajoutent ?"
+  }
+};
 
 const SIGNALS = [
   {
@@ -237,6 +276,55 @@ function personalizedDeepeners(stepIndex) {
   if (stepIndex === 0 && hasText(state.answers.intention)) {
     const outcomeQuestion = questions.find(q => q.id === "positiveOutcome" || q.id === "resultMeaning");
     return [questions.find(q => q.id.startsWith("signal_")), outcomeQuestion].filter(Boolean);
+  }
+
+  if (stepIndex === 1) {
+    const selectedEmotion = (state.answers.emotions || []).find(item => EMOTION_DEEPENERS[item]);
+    if (selectedEmotion) {
+      const deepener = EMOTION_DEEPENERS[selectedEmotion];
+      questions.push({
+        ...deepener,
+        after: "emotions",
+        type: "text",
+        adaptive: true,
+        personalized: true,
+        emotionProbe: true
+      });
+    }
+    if (hasAny(state.answers.body)) {
+      questions.push({
+        id: "bodySignal",
+        after: "body",
+        label: "Quand vous restez quelques instants avec cette sensation, qu’est-ce qui l’intensifie, l’apaise ou cherche à se mettre en mouvement ?",
+        type: "text",
+        adaptive: true,
+        personalized: true,
+        bodyProbe: true
+      });
+    }
+  }
+
+  if (stepIndex === 2 && hasText(state.answers.irritation)) {
+    questions.push({
+      id: "otherShould",
+      after: "irritation",
+      label: "Dans cette situation, que pensez-vous que cette personne devrait faire ou ne plus faire ?",
+      type: "text",
+      adaptive: true,
+      personalized: true,
+      projectionProbe: true
+    });
+    if (hasText(state.answers.otherShould)) {
+      questions.push({
+        id: "selfReturn",
+        after: "otherShould",
+        label: "Sans excuser l’autre ni nier vos limites, quelle part de cette demande pourriez-vous vous offrir à vous-même, exprimer clairement ou remettre à sa juste place ?",
+        type: "text",
+        adaptive: true,
+        personalized: true,
+        projectionProbe: true
+      });
+    }
   }
 
   return questions.slice(0, 2);
@@ -567,17 +655,39 @@ function beliefReframe(a) {
 function emotionReading(a) {
   const emotions = Array.isArray(a.emotions) ? a.emotions.filter(item => item !== "Autre") : [];
   const meanings = {
-    "Colère": "une limite, une valeur ou une place qui demande à être respectée",
+    "Colère / agacement": "une limite, une valeur ou une place qui demande à être regardée",
     "Tristesse": "une perte, une fin ou une transition qui demande à être reconnue",
     "Peur": "un danger possible, un manque de préparation ou un besoin de sécurité",
+    "Anxiété / angoisse": "une incertitude, une anticipation ou un conflit intérieur qui demande davantage de sécurité et de clarté",
     "Culpabilité": "un conflit possible entre vos actes, vos règles intérieures et ce qui compte pour vous",
     "Honte": "une peur d’être diminué ou rejeté dans le regard de l’autre",
+    "Jalousie": "une peur possible de perdre une place, un lien, une sécurité ou une reconnaissance",
     "Impuissance": "un besoin de distinguer ce qui dépend de vous de ce qui ne dépend pas de vous",
     "Confusion": "un besoin de ralentir, de séparer les faits des interprétations et de retrouver un premier repère"
   };
   const signals = emotions.map(item => meanings[item]).filter(Boolean);
   if (!signals.length) return "";
   return `L’émotion nommée peut être considérée comme un signal plutôt que comme un problème à supprimer. Elle pourrait indiquer ${signals.slice(0, 2).join(" ; ou encore ")}. Cette piste reste à vérifier dans votre situation concrète.`;
+}
+
+function bodyReading(a) {
+  const zones = Array.isArray(a.body) ? a.body.filter(item => item !== "Je ne sais pas") : [];
+  const detail = firstMeaningful(a.bodySignal, a.nowBody);
+  if (!zones.length && !detail) return "";
+  const location = zones.length ? `Vous avez réellement perçu quelque chose au niveau de ${zones.slice(0, 2).join(" et ").toLocaleLowerCase("fr")}. ` : "";
+  const evolution = detail ? `Vous précisez : « ${shortAnswer(detail, 145)} ». ` : "";
+  return `${location}${evolution}La sensation corporelle est une information réelle de votre expérience présente ; le sens qu’on lui donne reste toutefois une hypothèse à vérifier, pas une vérité automatique sur sa cause.`;
+}
+
+function projectionReading(a) {
+  const irritation = firstMeaningful(a.irritation);
+  const demand = firstMeaningful(a.otherShould);
+  const returnToSelf = firstMeaningful(a.selfReturn, a.shadowResource);
+  if (!irritation) return "";
+  let text = `Le trait qui vous atteint chez l’autre — « ${shortAnswer(irritation, 105)} » — peut signaler une limite réellement franchie, mais aussi toucher une qualité, une permission ou une blessure qui vous concerne personnellement.`;
+  if (demand) text += ` Votre attente — « ${shortAnswer(demand, 115)} » — aide à distinguer ce que vous pouvez demander à l’autre de ce que vous pouvez commencer à poser pour vous-même.`;
+  if (returnToSelf) text += ` Vous avez déjà formulé ce retour vers vous : « ${shortAnswer(returnToSelf, 125)} ».`;
+  return text;
 }
 
 function rhythmReading(value) {
@@ -616,8 +726,10 @@ function buildConclusion(a) {
       mechanism: "",
       implication: "",
       emotion: "",
+      body: "",
       belief: "",
       shadow: "",
+      projection: "",
       rhythm: "",
       awareness: "Ne pas forcer une interprétation est déjà une forme de justesse : la prochaine étape consiste à observer un exemple concret.",
       point: "Je peux prendre le temps de préciser ce que je vis, sans accepter une conclusion qui ne me ressemble pas.",
@@ -669,8 +781,10 @@ function buildConclusion(a) {
     mechanism,
     implication,
     emotion: emotionReading(a),
+    body: bodyReading(a),
     belief: beliefReframe(a),
     shadow,
+    projection: projectionReading(a),
     rhythm: rhythmReading(a.currentRhythm),
     awareness,
     point,
@@ -687,6 +801,9 @@ function guideReaction(q) {
   if (q.id === "positiveOutcome") return "Votre souhait est maintenant formulé comme une direction à construire, et pas uniquement comme une difficulté à faire disparaître.";
 
   if (q.personalized) {
+    if (q.emotionProbe) return "Vous explorez le message possible de l’émotion sans en faire une vérité automatique. Gardez seulement ce qui correspond réellement à votre situation.";
+    if (q.bodyProbe) return "Ce que votre corps ressent est réel dans l’instant. Son origine et sa signification restent à explorer avec prudence, à partir de votre contexte.";
+    if (q.projectionProbe) return "Cette question ne retire rien à la responsabilité de l’autre. Elle vous aide à séparer la limite à poser de ce que la situation vient réveiller en vous.";
     if (q.languageProbe) return "Cette précision aide à distinguer les faits, les interprétations et les règles intérieures. Vous pouvez ainsi retrouver davantage de choix.";
     const signal = SIGNALS.find(item => item.id === q.signal);
     return signal
@@ -886,6 +1003,14 @@ function renderSummary(complete = false) {
       <p>Ce bilan devient votre premier repère. Lors d’un prochain parcours, ÉCLAT pourra mettre en lumière ce qui a changé.</p>
     </div>`;
 
+  const currentTheme = signal ? signal.name : (a.coreWord || "un thème à préciser");
+  const recurrenceCount = history.filter(item => item.id !== state.id && sessionTheme(item) === currentTheme).length;
+  const recurringTheme = recurrenceCount > 0 ? `
+    <div class="recurring-theme">
+      <small>Un fil qui revient dans votre histoire</small>
+      <p>Le thème <strong>${escapeHtml(currentTheme)}</strong> apparaît dans ${recurrenceCount + 1} parcours. Cela ne prouve pas une cause unique, mais peut indiquer un point utile à observer dans des situations différentes.</p>
+    </div>` : "";
+
   $("#transformationCard").innerHTML = `
     <h2>Le fil essentiel de la séance</h2>
     ${intensityBadge}
@@ -904,6 +1029,7 @@ function renderSummary(complete = false) {
       ${a.commitment !== undefined ? `<p><b>Engagement ressenti :</b> ${escapeHtml(a.commitment)} / 10${+a.commitment < 7 ? " — l’action mérite d’être simplifiée ou ajustée." : ""}</p>` : ""}
     </div>
     ${personalReading}
+    ${recurringTheme}
     ${comparison}
     ${complete ? `<div class="return-invitation"><strong>Votre prochain rendez-vous avec vous-même</strong><p>Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît. Votre nouveau bilan sera comparé à celui-ci.</p></div>` : ""}`;
 
@@ -916,7 +1042,7 @@ function renderSummary(complete = false) {
       <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
     </div>
     <div class="conclusion-reading">
-      ${[conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.belief, conclusion.shadow, conclusion.rhythm].filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
+      ${[conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm].filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
     </div>
     ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h3>Pour construire une conclusion plus juste</h3><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
     <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
