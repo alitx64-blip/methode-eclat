@@ -68,8 +68,8 @@ const STEPS = [
       { id: "successEvidence", label: "Quel signe concret vous montrera qu’un premier changement est réellement en cours ?", type: "text", hint: "Quelque chose que vous pourrez observer, entendre, ressentir ou faire." },
       { id: "action", label: "Quelle petite action pourrait soutenir ce changement ?", type: "text" },
       { id: "commitment", label: "À quel point vous sentez-vous prêt à réaliser cette action ?", type: "scale" },
+      { id: "endIntensity", label: "Quelle intensité reste-t-il maintenant ?", type: "scale" },
       { id: "afterNeed", label: "De quoi avez-vous besoin après cette séance ?", type: "text" },
-      { id: "endIntensity", label: "Quelle intensité reste-t-il maintenant ?", type: "scale" }
     ]
   }
 ];
@@ -209,7 +209,7 @@ const SIGNALS = [
   },
   {
     id: "loss", name: "la perte et la séparation",
-    words: ["deuil", "mort", "decede", "perdu", "perte", "separation", "rupture", "manque", "absence", "quitte"],
+    words: ["deuil", "mort", "decede", "personne partie", "a disparu", "perdu un proche", "perte d un proche", "separation", "rupture", "abandon", "absence"],
     question: "Qu’est-ce qui vous manque le plus aujourd’hui dans ce lien, cette présence ou cette période de votre vie ?",
     resource: "honorer ce qui compte encore tout en laissant une nouvelle forme de lien ou d’élan devenir possible"
   }
@@ -221,10 +221,13 @@ function signalText(a = state.answers) {
 
 function detectedSignals(a = state.answers) {
   const haystack = signalText(a);
+  const containsSignal = word => word.includes(" ")
+    ? haystack.includes(word)
+    : new RegExp(`(?:^|\\s)${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\w*(?:$|\\s)`).test(haystack);
   return SIGNALS.map((signal, order) => ({
     ...signal,
     order,
-    score: signal.words.reduce((score, word) => score + (haystack.includes(word) ? 1 : 0), 0)
+    score: signal.words.reduce((score, word) => score + (containsSignal(word) ? 1 : 0), 0)
   })).filter(signal => signal.score > 0).sort((a, b) => b.score - a.score || a.order - b.order);
 }
 
@@ -254,7 +257,7 @@ function severeDistressDetected(a = state.answers) {
 }
 
 function partsConflict(a = state.answers) {
-  const text = allAnswerText(a);
+  const text = normalized([a.reason, a.difficulty, a.intention, a.immediateNeed, a.belief, a.need, a.value].filter(Boolean).join(" "));
   const pairs = [
     { first: "la liberté ou le changement", second: "la sécurité ou la stabilité", left: ["liberte", "etre libre", "quitter", "changer de metier", "reconversion", "me lancer", "nouveau projet", "autonomie", "independance"], right: ["securite", "stabilite", "revenu stable", "revenu regulier", "salaire", "peur de perdre", "credit", "emprunt", "charges", "trois enfants", "mes enfants", "risque financier"] },
     { first: "le repos ou le ralentissement", second: "l’obligation, la responsabilité ou le devoir d’avancer", left: ["repos", "me reposer", "souffler", "faire une pause", "ralentir", "lever le pied"], right: ["culpabil", "je dois", "obligation", "responsabilite", "productif", "travailler", "laisser tomber", "comptent sur moi", "tout le monde", "m occuper de"] },
@@ -271,11 +274,47 @@ function canDeepenFear(value, level) {
   return words.length >= minimumWords;
 }
 
+function saysNo(value) {
+  return /\b(non|pas vraiment|jamais|situation isolee|aucun souvenir|rien de familier)\b/.test(normalized(value));
+}
+
+function relationshipContext(a = state.answers) {
+  const text = allAnswerText(a);
+  const person = /\b(conjoint|conjointe|partenaire|mari|femme|compagnon|compagne|collegue|chef|manager|ami|amie|parent|pere|mere|frere|soeur|quelqu un|une personne|il|elle)\b/.test(text);
+  const interaction = /\b(dispute|conflit|relation|me dit|me demande|insiste|critique|juge|ecoute|parle|comportement|reaction|avec lui|avec elle)\b/.test(text);
+  return person && interaction;
+}
+
+function pastExplorationRelevant(a = state.answers) {
+  if (includesAny(a.recurrence, ["Situation isolée"])) return false;
+  const text = allAnswerText(a);
+  return includesAny(a.recurrence, ["Cela revient parfois", "Cela revient souvent"]) || /\b(familier|deja|souvenir|avant|autrefois|enfance|se repete|revient)\b/.test(text);
+}
+
+function hasExplicitCost(a = state.answers) {
+  return /\b(me coute|m empeche|me prive|m epuise|perdre du temps|procrast|bloque|freine|limite)\b/.test(allAnswerText(a));
+}
+
+function baseQuestionVisible(stepIndex, question, a = state.answers) {
+  if (stepIndex === 2 && question.id === "irritation") return relationshipContext(a);
+  if (stepIndex === 2 && question.id === "familiar") return pastExplorationRelevant(a) && !hasText(a.commonThread);
+  if (stepIndex === 2 && question.id === "pastNeed") return hasText(a.familiar) && !saysNo(a.familiar);
+  if (stepIndex === 3 && question.id === "beliefAxis") return hasText(a.belief) && !/\b(autoris\w*|capable|peux faire|droit de)\b/.test(normalized(a.belief));
+  if (stepIndex === 4 && question.id === "sensitivity") return relationshipContext(a) && includesAny(a.themes, ["Silence", "Rejet", "Abandon", "Manque de place"]);
+  if (stepIndex === 4 && question.id === "offering") return /\b(autres|aider|accompagner|soutenir)\b/.test(normalized(a.sensitivity));
+  if (stepIndex === 4 && question.id === "selfGift") return hasText(a.offering);
+  if (stepIndex === 5 && question.id === "currentRhythm") return !hasText(a.newChoice);
+  if (stepIndex === 5 && question.id === "afterNeed") {
+    return (Number.isFinite(+a.endIntensity) && +a.endIntensity >= 7) || (Number.isFinite(+a.commitment) && +a.commitment < 7);
+  }
+  return true;
+}
+
 function personalizedDeepeners(stepIndex) {
   const signal = leadingSignal();
   const questions = [];
 
-  if (stepIndex === 0 && signal && hasText(state.answers.reason)) {
+  if (stepIndex === 0 && signal && hasText(state.answers.reason) && signal.score >= 2 && !(state.adaptiveQuestionBank?.[0] || []).some(question => question.id.startsWith("signal_"))) {
     questions.push({
       id: `signal_${signal.id}`,
       after: "reason",
@@ -299,21 +338,9 @@ function personalizedDeepeners(stepIndex) {
 
     if (isNegativeGoal(state.answers.intention)) {
       questions.push({ id: "positiveOutcome", after: "intention", label: "Si vous ne viviez plus cela, que voudriez-vous vivre, ressentir ou faire précisément à la place ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
-    } else if (hasText(state.answers.intention)) {
+    } else if (hasText(state.answers.intention) && textValue(state.answers.intention).trim().split(/\s+/).length < 8) {
       questions.push({ id: "resultMeaning", after: "intention", label: "Si cette situation souhaitée devenait réelle, qu’est-ce que cela vous apporterait d’important ?", type: "text", adaptive: true, personalized: true, languageProbe: true });
     }
-  }
-
-  if (stepIndex === 3 && signal && hasText(state.answers.coreWord)) {
-    questions.push({
-      id: `signalNeed_${signal.id}`,
-      after: "coreWord",
-      label: `En lien avec ${signal.name}, qu’est-ce que vous cherchez surtout à préserver ou à retrouver ?`,
-      type: "text",
-      adaptive: true,
-      personalized: true,
-      signal: signal.id
-    });
   }
 
   if (stepIndex === 0 && hasText(state.answers.intention)) {
@@ -334,7 +361,7 @@ function personalizedDeepeners(stepIndex) {
         emotionProbe: true
       });
     }
-    if (hasAny(state.answers.body)) {
+    if (hasAny(state.answers.body) && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 8 && !relationshipContext()) {
       questions.push({
         id: "bodySignal",
         after: "body",
@@ -356,23 +383,42 @@ function personalizedDeepeners(stepIndex) {
         hint: "Vous pouvez laisser cette question sans réponse pour arrêter l’approfondissement.",
         type: "text", adaptive: true, personalized: true, fearProbe: true
       });
-      let lastId = "fearImplication1";
-      for (let level = 1; level < 4; level++) {
-        const currentId = `fearImplication${level}`;
-        if (!hasText(state.answers[currentId]) || !canDeepenFear(state.answers[currentId], level)) break;
-        const nextId = `fearImplication${level + 1}`;
-        fearQuestions.push({
-          id: nextId,
-          after: currentId,
-          label: level === 1 ? "Et si cette conséquence se produisait, qu’est-ce que cela impliquerait pour vous ?" : "Si vous suivez encore cette conséquence, qu’est-ce qu’elle impliquerait pour vous ?",
-          hint: "Continuez seulement si cette question vous paraît utile ; vous pouvez vous arrêter.",
-          type: "text", adaptive: true, personalized: true, fearProbe: true
-        });
-        lastId = nextId;
-      }
-      if (hasText(state.answers[lastId])) fearQuestions.push({
+      const implication1CanDeepen = canDeepenFear(state.answers.fearImplication1, 1) && !relationshipContext() && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 7;
+      if (implication1CanDeepen) fearQuestions.push({
+        id: "fearImplication2", after: "fearImplication1",
+        label: "Et si cette conséquence se produisait, qu’est-ce que cela impliquerait pour vous ?",
+        hint: "Continuez seulement si cette question vous paraît utile ; vous pouvez vous arrêter.",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+      if (hasText(state.answers.fearImplication2)) fearQuestions.push({
+        id: "fearDepthChoice", after: "fearImplication2",
+        label: "Souhaitez-vous continuer à approfondir cette peur ?",
+        type: "chips", options: ["Oui, continuer", "Non, aller à l’essentiel"],
+        adaptive: true, personalized: true, fearProbe: true
+      });
+      const continueFear = includesAny(state.answers.fearDepthChoice, ["Oui, continuer"]);
+      if (continueFear) fearQuestions.push({
+        id: "fearImplication3", after: "fearDepthChoice",
+        label: "Si vous suivez encore cette conséquence, qu’est-ce qu’elle impliquerait pour vous ?",
+        hint: "Vous pouvez vous arrêter dès que l’enjeu vous paraît suffisamment clair.",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+      const implication3 = normalized(state.answers.fearImplication3);
+      const implication3StillGeneral = implication3.split(/\s+/).filter(Boolean).length < 10 || /\b(mal|peur|echec|probleme|difficile)\b/.test(implication3);
+      if (continueFear && hasText(state.answers.fearImplication3) && implication3StillGeneral) fearQuestions.push({
+        id: "fearImplication4", after: "fearImplication3",
+        label: "Qu’est-ce que cette conséquence toucherait de particulièrement important pour vous ?",
+        hint: "Dernier niveau facultatif avant d’aller à l’essentiel.",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+      const fearEndId = !implication1CanDeepen
+        ? "fearImplication1"
+        : continueFear
+          ? (fearQuestions.some(q => q.id === "fearImplication4") ? "fearImplication4" : "fearImplication3")
+          : "fearDepthChoice";
+      if (hasText(state.answers[fearEndId]) || includesAny(state.answers.fearDepthChoice, ["Non, aller à l’essentiel"])) fearQuestions.push({
         id: "fearCore",
-        after: lastId,
+        after: fearEndId,
         label: "En regardant ce chemin, quel semble être l’enjeu le plus profond pour vous ?",
         type: "text", adaptive: true, personalized: true, fearProbe: true
       });
@@ -422,22 +468,40 @@ function personalizedDeepeners(stepIndex) {
   }
 
   if (stepIndex === 1 && questions.some(q => q.fearProbe)) return questions.filter(q => q.emotionProbe || q.fearProbe || q.bodyProbe);
-  if (stepIndex === 3 && questions.some(q => q.partsProbe)) return questions.filter(q => q.partsProbe || q.id.startsWith("signalNeed_"));
+  if (stepIndex === 3 && questions.some(q => q.partsProbe)) return questions.filter(q => q.partsProbe);
   return questions.slice(0, 2);
 }
 
 function activeQuestions(stepIndex) {
-  const base = STEPS[stepIndex].questions;
+  const base = STEPS[stepIndex].questions.filter(question =>
+    baseQuestionVisible(stepIndex, question) || hasText(state.answers[question.id]) || state.currentQuestionId === question.id || state.feedbackQuestionId === question.id
+  );
   const tailored = personalizedDeepeners(stepIndex);
-  const genericLimit = Math.max(0, 2 - tailored.length);
-  const genericCandidates = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers));
+  const genericLimit = Math.max(0, 1 - tailored.filter(question => !question.fearProbe && !question.partsProbe).length);
+  const genericCandidates = (DEEPENERS[stepIndex] || []).filter(q => {
+    if (!q.when(state.answers)) return false;
+    if (q.id === "personalImpact" && !(Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 7) && textValue(state.answers.difficulty).trim().split(/\s+/).length < 12) return false;
+    if (q.id === "protectionCost" && hasExplicitCost() && !hasText(state.answers.protectionCost)) return false;
+    if (q.id === "protectionCost" && includesAny(state.answers.recurrence, ["Situation isolée"]) && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity < 7) return false;
+    if (q.id === "bodySignal" && !(Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 8)) return false;
+    if (q.id === "ruleFear" && hasText(state.answers.fearCore)) return false;
+    if (q.id === "beliefOrigin" && containsRule(state.answers.belief)) return false;
+    if (q.id === "deepNeed" && hasText(state.answers.need) && textValue(state.answers.need).split(/\s+/).length >= 10) return false;
+    if (q.id === "hiddenStrength" && textValue(state.answers.quality).trim().split(/\s+/).length >= 5) return false;
+    if (q.id === "choiceBarrier" && !includesAny(state.answers.recurrence, ["Cela revient souvent"])) return false;
+    if (q.id === "choiceResource" && hasText(state.answers.quality)) return false;
+    if (q.id === "actionWhen" && /\b(demain|aujourd hui|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|matin|midi|soir|heure|h)\b/.test(normalized(state.answers.actionSmall || state.answers.action))) return false;
+    if (q.id === "support" && !(Number.isFinite(+state.answers.endIntensity) && +state.answers.endIntensity >= 7) && !(Number.isFinite(+state.answers.commitment) && +state.answers.commitment < 7)) return false;
+    return true;
+  });
   const baseIds = new Set(base.map(q => q.id));
   const genericRoots = genericCandidates.filter(q => baseIds.has(q.after)).slice(0, genericLimit);
   const generic = [];
   const addGenericChain = question => {
     if (!question || generic.some(item => item.id === question.id)) return;
     generic.push({ ...question, type: "text", adaptive: true });
-    genericCandidates.filter(candidate => candidate.after === question.id).forEach(addGenericChain);
+    const allowChild = ["protectionPurpose", "choiceBarrier", "actionSmall"].includes(question.id);
+    if (allowChild) genericCandidates.filter(candidate => candidate.after === question.id).forEach(addGenericChain);
   };
   genericRoots.forEach(addGenericChain);
   const eligible = [...tailored, ...generic];
@@ -1087,6 +1151,16 @@ function guideReaction(q) {
   return "Merci. Vos mots donnent une direction à la suite du parcours.";
 }
 
+function feedbackWorthShowing(q) {
+  return new Set([
+    "reason", "difficulty", "intention", "emotionWords", "immediateNeed", "triggers", "protection",
+    "belief", "need", "value", "newChoice", "takeaway", "action",
+    "resultMeaning", "positiveOutcome", "fearCore", "protectionPurpose", "protectionCost",
+    "otherShould", "selfReturn", "partsDialogue", "partsMovement", "hiddenStrength",
+    "choiceBarrier", "choiceResource", "actionSmall"
+  ]).has(q.id);
+}
+
 function bind(q) {
   const textarea = stepContent.querySelector("textarea");
   if (textarea) {
@@ -1416,6 +1490,24 @@ $("#newSession").onclick = () => {
 
 $("#resumeSession").onclick = () => start(false);
 
+function moveForwardFrom(questionId) {
+  const currentQuestions = activeQuestions(state.step);
+  const currentIndex = resolvedQuestionIndex(currentQuestions, questionId || state.currentQuestionId, state.question);
+  state.feedback = false;
+  state.feedbackQuestionId = null;
+  if (currentIndex < currentQuestions.length - 1) {
+    selectQuestion(currentQuestions, currentIndex + 1);
+  } else if (state.step < STEPS.length - 1) {
+    state.step++;
+    const nextQuestions = activeQuestions(state.step);
+    selectQuestion(nextQuestions, 0);
+  } else {
+    return renderSummary(true);
+  }
+  save();
+  renderStep();
+}
+
 $("#previousBtn").onclick = () => {
   if (state.feedback) {
     state.feedback = false;
@@ -1437,28 +1529,17 @@ $("#previousBtn").onclick = () => {
 
 $("#nextBtn").onclick = () => {
   if (!state.feedback) {
-    state.feedbackQuestionId = state.currentQuestionId || activeQuestions(state.step)[state.question]?.id || null;
+    const currentQuestions = activeQuestions(state.step);
+    const questionId = state.currentQuestionId || currentQuestions[state.question]?.id || null;
+    const currentQuestion = currentQuestions.find(question => question.id === questionId);
+    if (currentQuestion && !feedbackWorthShowing(currentQuestion)) return moveForwardFrom(questionId);
+    state.feedbackQuestionId = questionId;
     state.feedback = true;
     save();
     renderStep();
     return;
   }
-
-  const currentQuestions = activeQuestions(state.step);
-  const currentIndex = resolvedQuestionIndex(currentQuestions, state.feedbackQuestionId || state.currentQuestionId, state.question);
-  state.feedback = false;
-  state.feedbackQuestionId = null;
-  if (currentIndex < currentQuestions.length - 1) {
-    selectQuestion(currentQuestions, currentIndex + 1);
-  } else if (state.step < STEPS.length - 1) {
-    state.step++;
-    const nextQuestions = activeQuestions(state.step);
-    selectQuestion(nextQuestions, 0);
-  } else {
-    return renderSummary(true);
-  }
-  save();
-  renderStep();
+  moveForwardFrom(state.feedbackQuestionId || state.currentQuestionId);
 };
 
 $("#summaryBtn").onclick = () => renderSummary(false);
