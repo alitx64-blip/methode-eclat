@@ -679,7 +679,13 @@ function bodyReading(a) {
   const zones = Array.isArray(a.body) ? a.body.filter(item => item !== "Je ne sais pas") : [];
   const detail = firstMeaningful(a.bodySignal, a.nowBody);
   if (!zones.length && !detail) return "";
-  const location = zones.length ? `Vous avez réellement perçu quelque chose au niveau de ${zones.slice(0, 2).join(" et ").toLocaleLowerCase("fr")}. ` : "";
+  const zoneNames = {
+    "Tête": "la tête", "Gorge": "la gorge", "Poitrine": "la poitrine", "Ventre": "le ventre",
+    "Dos": "le dos", "Épaules": "les épaules", "Bras / mains": "les bras ou les mains",
+    "Jambes": "les jambes", "Partout": "l’ensemble du corps"
+  };
+  const namedZones = zones.slice(0, 2).map(zone => zoneNames[zone] || zone.toLocaleLowerCase("fr"));
+  const location = namedZones.length ? `Vous avez réellement perçu quelque chose dans ${namedZones.join(" et ")}. ` : "";
   const evolution = detail ? `Vous précisez : « ${shortAnswer(detail, 145)} ». ` : "";
   return `${location}${evolution}La sensation corporelle est une information réelle de votre expérience présente ; le sens qu’on lui donne reste toutefois une hypothèse à vérifier, pas une vérité automatique sur sa cause.`;
 }
