@@ -28,10 +28,15 @@ export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // La protection ne s'active qu'une fois les deux secrets Cloudflare configurés.
-  if (!env.ECLAT_PASSWORD || !env.ECLAT_SESSION_SECRET) return context.next();
+  const publicPaths = ["/connexion", "/connexion.html", "/styles.css", "/favicon.svg", "/manifest.json"];
+  const publicRequest = publicPaths.includes(url.pathname) || url.pathname.startsWith("/api/auth/");
+  if (publicRequest) return context.next();
 
-  if (url.pathname === "/connexion" || url.pathname === "/connexion.html" || url.pathname.startsWith("/api/auth/")) return context.next();
+  // Sans les deux secrets, le parcours reste fermé plutôt que d'être publié sans protection.
+  if (!env.ECLAT_PASSWORD || !env.ECLAT_SESSION_SECRET) {
+    if (url.pathname.startsWith("/api/")) return Response.json({ message: "Protection ÉCLAT non configurée." }, { status: 503 });
+    return Response.redirect(`${url.origin}/connexion?configuration=manquante`, 302);
+  }
 
   const token = readCookie(request, "eclat_session");
   if (await validSession(token, env.ECLAT_SESSION_SECRET)) return context.next();
