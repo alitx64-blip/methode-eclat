@@ -232,6 +232,31 @@ function leadingSignal(a = state.answers) {
   return detectedSignals(a)[0] || null;
 }
 
+function allAnswerText(a = state.answers) {
+  return normalized(Object.values(a || {}).flatMap(value => Array.isArray(value) ? value : [value]).filter(value => typeof value === "string").join(" "));
+}
+
+function severeDistressDetected(a = state.answers) {
+  const text = allAnswerText(a);
+  return [
+    /\bje (?:veux|vais) (?:me )?(?:suicider|tuer)\b/,
+    /\b(?:envie|intention) d en finir\b/,
+    /\bje ne veux plus vivre\b/,
+    /\bje veux mourir\b/,
+    /\bje suis en danger immediat\b/
+  ].some(pattern => pattern.test(text));
+}
+
+function partsConflict(a = state.answers) {
+  const text = allAnswerText(a);
+  const pairs = [
+    { first: "la liberté ou le changement", second: "la sécurité ou la stabilité", left: ["liberte", "libre", "quitter", "changer", "autonomie", "independance"], right: ["securite", "stabilite", "stable", "salaire", "peur de perdre", "risque"] },
+    { first: "le repos ou le ralentissement", second: "le devoir d’avancer ou de rester productif", left: ["repos", "reposer", "souffler", "pause", "ralentir"], right: ["culpabil", "je dois", "obligation", "productif", "travailler"] },
+    { first: "le besoin d’être entendu ou de vous exprimer", second: "la protection du lien ou l’évitement du conflit", left: ["entendu", "exprimer", "parler", "dire ce que"], right: ["me tais", "silence", "eviter le conflit", "dispute", "peur du conflit"] }
+  ];
+  return pairs.find(pair => pair.left.some(word => text.includes(word)) && pair.right.some(word => text.includes(word))) || null;
+}
+
 function personalizedDeepeners(stepIndex) {
   const signal = leadingSignal();
   const questions = [];
@@ -306,6 +331,48 @@ function personalizedDeepeners(stepIndex) {
         bodyProbe: true
       });
     }
+
+    const fearIsCentral = includesAny(state.answers.emotions, ["Peur", "Anxiété / angoisse"]) || leadingSignal()?.id === "fear";
+    if (fearIsCentral && hasText(state.answers.fearScenario)) {
+      questions.push({
+        id: "fearImplication1",
+        after: "fearScenario",
+        label: "Si cela arrivait, qu’est-ce que cela impliquerait pour vous ?",
+        hint: "Vous pouvez laisser cette question sans réponse pour arrêter l’approfondissement.",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+      if (hasText(state.answers.fearImplication1)) questions.push({
+        id: "fearImplication2",
+        after: "fearImplication1",
+        label: "Et si cette conséquence arrivait, qu’est-ce que cela impliquerait plus profondément pour vous ?",
+        hint: "Vous pouvez vous arrêter ici si aller plus loin ne vous semble pas utile.",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+      if (hasText(state.answers.fearImplication2)) questions.push({
+        id: "fearCore",
+        after: "fearImplication2",
+        label: "En regardant ce chemin, quel semble être l’enjeu le plus profond pour vous ?",
+        type: "text", adaptive: true, personalized: true, fearProbe: true
+      });
+    }
+  }
+
+  if (stepIndex === 3) {
+    const conflict = partsConflict();
+    if (conflict && hasText(state.answers.need)) {
+      questions.push({
+        id: "partsDialogue",
+        after: "need",
+        label: `Deux élans semblent présents : ${conflict.first}, et ${conflict.second}. Que veut la première partie, que cherche à protéger l’autre, et de quoi chacune aurait-elle besoin ?`,
+        type: "text", adaptive: true, personalized: true, partsProbe: true
+      });
+      if (hasText(state.answers.partsDialogue)) questions.push({
+        id: "partsMovement",
+        after: "partsDialogue",
+        label: "Quel petit mouvement pourrait respecter ces deux parties, sans forcer l’une à faire taire l’autre ?",
+        type: "text", adaptive: true, personalized: true, partsProbe: true
+      });
+    }
   }
 
   if (stepIndex === 2 && hasText(state.answers.irritation)) {
@@ -331,13 +398,15 @@ function personalizedDeepeners(stepIndex) {
     }
   }
 
+  if (stepIndex === 1 && questions.some(q => q.fearProbe)) return questions.filter(q => q.emotionProbe || q.fearProbe || q.bodyProbe);
+  if (stepIndex === 3 && questions.some(q => q.partsProbe)) return questions.filter(q => q.partsProbe || q.id.startsWith("signalNeed_"));
   return questions.slice(0, 2);
 }
 
 function activeQuestions(stepIndex) {
   const base = STEPS[stepIndex].questions;
   const tailored = personalizedDeepeners(stepIndex);
-  const genericLimit = Math.max(1, 3 - tailored.length);
+  const genericLimit = Math.max(0, 2 - tailored.length);
   const generic = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers)).slice(0, genericLimit).map(q => ({ ...q, type: "text", adaptive: true }));
   const eligible = [...tailored, ...generic];
   const result = [];
@@ -712,6 +781,17 @@ function rhythmReading(value) {
   return choices.map(choice => map[choice]).filter(Boolean).join(" ");
 }
 
+function tensionReading(a) {
+  const conflict = partsConflict(a);
+  if (!conflict) return "";
+  const exploration = firstMeaningful(a.partsDialogue);
+  const movement = firstMeaningful(a.partsMovement);
+  let text = `Il semble qu’une tension soit présente entre ${conflict.first} et ${conflict.second}. Ce n’est pas forcément une contradiction à résoudre en choisissant un camp : une piste pourrait être d’écouter ce que chaque élan veut rendre possible ou protéger.`;
+  if (exploration) text += ` Vous la formulez ainsi : « ${shortAnswer(exploration, 150)} ».`;
+  if (movement) text += ` Le mouvement qui pourrait respecter les deux serait : « ${shortAnswer(movement, 140)} ».`;
+  return text;
+}
+
 function buildConclusion(a) {
   const theme = conclusionTheme(a);
   const protection = firstMeaningful(a.protection);
@@ -784,6 +864,18 @@ function buildConclusion(a) {
       ? `Je peux reconnaître ce qui m’a protégé et m’appuyer maintenant sur ${embeddedAnswer(resource)}.`
       : `Je peux accueillir ce que je comprends aujourd’hui et choisir un premier mouvement plus juste pour moi.`;
 
+  const emotions = Array.isArray(a.emotions) ? a.emotions.filter(item => item !== "Autre").slice(0, 2).join(" et ") : "";
+  const felt = firstMeaningful(a.emotionWords) || emotions;
+  const body = Array.isArray(a.body) ? a.body.filter(item => item !== "Je ne sais pas").slice(0, 2).join(" et ") : firstMeaningful(a.body);
+  const trigger = firstMeaningful(a.triggers);
+  const belief = firstMeaningful(a.belief);
+  const fearCore = firstMeaningful(a.fearCore, a.fearImplication2, a.fearImplication1);
+  const narrative = [
+    `${opening ? `Vous partez de « ${shortAnswer(opening, 155)} »` : "Vous avez décrit une situation qui compte pour vous"}${trigger ? `, qui semble notamment se réactiver lorsque « ${shortAnswer(trigger, 115)} »` : ""}. ${felt ? `Vous y associez « ${shortAnswer(felt, 105)} »` : "Vous avez pris le temps d’observer ce qui se présente"}${body ? `, avec un écho dans ${body.toLocaleLowerCase("fr")}` : ""}. Ces éléments rapprochent la situation, l’émotion et le corps sans prétendre expliquer automatiquement leur cause.`,
+    `${protection ? `Quand cela arrive, vous dites : « ${shortAnswer(protection, 90)} »` : "Une manière de vous protéger apparaît dans vos réponses"}. ${protectionGoal ? `Il semble que cette réaction cherche à ${embeddedAnswer(protectionGoal, 125)}.` : ""}${cost ? ` En même temps, vous constatez ce coût : « ${shortAnswer(cost, 145)} ».` : ""}${belief ? ` La phrase intérieure « ${shortAnswer(belief, 105)} » pourrait contribuer à maintenir ce mouvement ; elle reste une hypothèse à vérifier, et non une vérité sur vous.` : ""}${fearCore ? ` En suivant le chemin de la peur, l’enjeu que vos mots font apparaître est « ${shortAnswer(fearCore, 130)} ».` : ""} ${tensionReading(a)}`.trim(),
+    `${need ? `Sous cette protection, vous nommez un besoin de ${embeddedAnswer(need, 110)}` : "Votre exploration ouvre un besoin à préciser"}${value ? ` et une valeur importante : ${embeddedAnswer(value, 90)}` : ""}. ${resource ? `Vous disposez déjà de cette ressource : ${embeddedAnswer(resource, 115)}.` : ""}${choice ? ` Une piste pourrait être de vous en servir pour « ${shortAnswer(choice, 125)} »` : ""}${action ? `, en commençant par « ${shortAnswer(action, 125)} »` : ""}. Si cela résonne pour vous, le nouveau choix n’aurait donc pas à nier ce qui vous protège, mais à lui offrir une réponse plus ajustée à ce dont vous avez besoin aujourd’hui.`
+  ];
+
   return {
     theme,
     insufficient: false,
@@ -797,6 +889,7 @@ function buildConclusion(a) {
     shadow,
     projection: projectionReading(a),
     rhythm: rhythmReading(a.currentRhythm),
+    narrative,
     awareness,
     point,
     action: action || firstMeaningful(a.successEvidence),
@@ -812,6 +905,8 @@ function guideReaction(q) {
   if (q.id === "positiveOutcome") return "Votre souhait est maintenant formulé comme une direction à construire, et pas uniquement comme une difficulté à faire disparaître.";
 
   if (q.personalized) {
+    if (q.fearProbe) return "Vous approfondissez la peur à votre rythme. Vous pouvez arrêter ce chemin à tout moment et garder seulement ce qui vous paraît juste.";
+    if (q.partsProbe) return "Vous donnez une place aux deux élans sans décider que l’un a raison contre l’autre.";
     if (q.emotionProbe) return "Vous explorez le message possible de l’émotion sans en faire une vérité automatique. Gardez seulement ce qui correspond réellement à votre situation.";
     if (q.bodyProbe) return "Ce que votre corps ressent est réel dans l’instant. Son origine et sa signification restent à explorer avec prudence, à partir de votre contexte.";
     if (q.projectionProbe) return "Cette question ne retire rien à la responsabilité de l’autre. Elle vous aide à séparer la limite à poser de ce que la situation vient réveiller en vous.";
@@ -890,6 +985,22 @@ function renderStep() {
 
   const s = STEPS[state.step];
   const currentQuestions = activeQuestions(state.step);
+
+  $("#nextBtn").style.display = "";
+  if (severeDistressDetected()) {
+    $("#stepNumber").textContent = "Pause — priorité à votre sécurité";
+    $("#progressBar").style.width = "100%";
+    stepContent.innerHTML = `
+      <div class="conversation">
+        <div class="pause-box">
+          <span>♡</span>
+          <div><b>ÉCLAT s’arrête ici pour ne pas pousser l’introspection.</b><br>Ce que vous avez écrit appelle un soutien humain immédiat. Ne restez pas seul·e : contactez maintenant une personne de confiance, un professionnel, ou les urgences (15 ou 112 en France ; le numéro d’urgence local si vous êtes ailleurs). Si vous êtes en danger, éloignez-vous de tout moyen de vous faire du mal et allez vers une personne ou un lieu sûr.</div>
+        </div>
+      </div>`;
+    $("#previousBtn").style.visibility = "visible";
+    $("#nextBtn").style.display = "none";
+    return;
+  }
 
   if (state.question >= currentQuestions.length) {
     state.question = currentQuestions.length - 1;
@@ -1053,7 +1164,7 @@ function renderSummary(complete = false) {
       <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
     </div>
     <div class="conclusion-reading">
-      ${[conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm].filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
+      ${(conclusion.narrative?.length ? conclusion.narrative : [conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm]).filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
     </div>
     ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h3>Pour construire une conclusion plus juste</h3><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
     <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
