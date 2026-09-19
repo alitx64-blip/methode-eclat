@@ -23,7 +23,10 @@
         <small>Mon parcours ÉCLAT</small>
       </span>
     </button>
-    <button class="ghost small" id="privacyBtn" type="button">Confidentialité</button>
+    <div>
+      <button class="ghost small" id="breathBtn" type="button">♡ Respiration</button>
+      <button class="ghost small" id="privacyBtn" type="button">Confidentialité</button>
+    </div>
   </header>
 
   <main>
@@ -117,6 +120,19 @@
     <p class="eyebrow">Confidentialité</p>
     <h2>Vos réponses restent ici</h2>
     <p>Elles sont conservées uniquement dans ce navigateur sur cet appareil.</p>
+  </dialog>
+
+  <!-- Modale Respiration / Cohérence Cardiaque -->
+  <dialog id="breathDialog">
+    <button class="dialog-close" id="closeBreath" type="button" aria-label="Fermer la respiration">×</button>
+    <p class="eyebrow">Cohérence cardiaque</p>
+    <h2>Prenez un temps de respiration</h2>
+    <p>Suivez le cercle : inspirez lorsqu'il s'agrandit, expirez lorsqu'il se réduit.</p>
+    
+    <div class="breath-container">
+      <div class="breath-circle"></div>
+      <p id="breathText" class="breath-text">Inspirer...</p>
+    </div>
   </dialog>
 
   <script>
