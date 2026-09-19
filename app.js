@@ -109,9 +109,111 @@ function normalized(v) { return textValue(v).toLocaleLowerCase("fr").normalize("
 function containsRule(v) { return /\b(il faut|je dois|je ne dois|oblige|obligation|pas le droit)\b/.test(normalized(v)); }
 function containsAbsolute(v) { return /\b(toujours|jamais|tout le monde|personne|aucun|rien|impossible)\b/.test(normalized(v)); }
 
+const SIGNALS = [
+  {
+    id: "confidence", name: "le doute et la légitimité",
+    words: ["doute", "confiance", "legitime", "legitimite", "capable", "incapable", "valeur", "niveau", "assez bien", "imposteur", "imposture"],
+    question: "Quand le doute apparaît, qu’est-ce qu’il vous fait croire sur votre valeur ou votre capacité ?",
+    resource: "vous appuyer sur ce que vous savez déjà faire et avancer sans attendre de vous sentir parfaitement légitime"
+  },
+  {
+    id: "judgment", name: "le regard des autres",
+    words: ["jugement", "juge", "regard", "avis", "criti", "moquer", "decevoir", "plaire", "rejet"],
+    question: "Qu’est-ce que vous redoutez le plus dans le regard ou la réaction des autres ?",
+    resource: "différencier ce qui vous appartient de ce qui appartient au regard extérieur"
+  },
+  {
+    id: "action", name: "le passage à l’action",
+    words: ["bloque", "blocage", "lancer", "projet", "commencer", "agir", "avance", "decision", "choisir", "ose", "passer a l action", "procrast"],
+    question: "Au moment précis de passer à l’action, quelle pensée, peur ou sensation vous arrête ?",
+    resource: "transformer le blocage en un premier mouvement assez petit pour rester possible"
+  },
+  {
+    id: "fear", name: "la peur et l’insécurité",
+    words: ["peur", "angoiss", "anxie", "inquiet", "insecur", "danger", "panique", "crainte"],
+    question: "De quoi cette peur essaie-t-elle de vous protéger, ici et maintenant ?",
+    resource: "retrouver de la sécurité sans laisser la peur décider de toute la suite"
+  },
+  {
+    id: "overload", name: "la fatigue et la surcharge",
+    words: ["fatigue", "epuise", "deborde", "charge", "trop", "pression", "stress", "souffle", "reposer"],
+    question: "Parmi tout ce que vous portez, qu’est-ce qui ne devrait plus reposer uniquement sur vous ?",
+    resource: "alléger, prioriser et reconnaître vos limites avant l’épuisement"
+  },
+  {
+    id: "relationship", name: "la relation et la place de chacun",
+    words: ["couple", "relation", "famille", "mere", "pere", "enfant", "ami", "collegue", "conflit", "dispute", "seul", "solitude"],
+    question: "Dans cette relation, qu’auriez-vous besoin de pouvoir dire, demander ou poser plus clairement ?",
+    resource: "rester en lien sans vous éloigner de ce qui est juste pour vous"
+  },
+  {
+    id: "boundaries", name: "les limites et la place",
+    words: ["limite", "place", "envahi", "non", "respect", "sacrif", "adapte", "tais", "silence", "priorite"],
+    question: "Quelle limite ou quelle place aurait besoin d’être reconnue dans cette situation ?",
+    resource: "prendre votre place avec justesse, sans devoir vous effacer ni vous durcir"
+  },
+  {
+    id: "loss", name: "la perte et la séparation",
+    words: ["deuil", "mort", "decede", "perdu", "perte", "separation", "rupture", "manque", "absence", "quitte"],
+    question: "Qu’est-ce qui vous manque le plus aujourd’hui dans ce lien, cette présence ou cette période de votre vie ?",
+    resource: "honorer ce qui compte encore tout en laissant une nouvelle forme de lien ou d’élan devenir possible"
+  }
+];
+
+function signalText(a = state.answers) {
+  return normalized([a.reason, a.difficulty, a.intention, a.emotionWords, a.immediateNeed, a.triggers, a.belief, a.need].filter(Boolean).join(" "));
+}
+
+function detectedSignals(a = state.answers) {
+  const haystack = signalText(a);
+  return SIGNALS.map((signal, order) => ({
+    ...signal,
+    order,
+    score: signal.words.reduce((score, word) => score + (haystack.includes(word) ? 1 : 0), 0)
+  })).filter(signal => signal.score > 0).sort((a, b) => b.score - a.score || a.order - b.order);
+}
+
+function leadingSignal(a = state.answers) {
+  return detectedSignals(a)[0] || null;
+}
+
+function personalizedDeepeners(stepIndex) {
+  const signal = leadingSignal();
+  if (!signal) return [];
+
+  if (stepIndex === 0 && hasText(state.answers.reason)) {
+    return [{
+      id: `signal_${signal.id}`,
+      after: "reason",
+      label: signal.question,
+      type: "text",
+      adaptive: true,
+      personalized: true,
+      signal: signal.id
+    }];
+  }
+
+  if (stepIndex === 3 && hasText(state.answers.coreWord)) {
+    return [{
+      id: `signalNeed_${signal.id}`,
+      after: "coreWord",
+      label: `En lien avec ${signal.name}, qu’est-ce que vous cherchez surtout à préserver ou à retrouver ?`,
+      type: "text",
+      adaptive: true,
+      personalized: true,
+      signal: signal.id
+    }];
+  }
+
+  return [];
+}
+
 function activeQuestions(stepIndex) {
   const base = STEPS[stepIndex].questions;
-  const eligible = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers)).slice(0, 2).map(q => ({ ...q, type: "text", adaptive: true }));
+  const tailored = personalizedDeepeners(stepIndex);
+  const genericLimit = Math.max(1, 2 - tailored.length);
+  const generic = (DEEPENERS[stepIndex] || []).filter(q => q.when(state.answers)).slice(0, genericLimit).map(q => ({ ...q, type: "text", adaptive: true }));
+  const eligible = [...tailored, ...generic];
   const result = [];
   const addAfter = id => eligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
   base.forEach(q => { result.push(q); addAfter(q.id); });
@@ -253,9 +355,22 @@ function answerText(q) {
   return Array.isArray(v) ? v.join(", ") : String(v ?? "").trim();
 }
 
+function shortAnswer(value, max = 150) {
+  const clean = textValue(value).replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > max ? `${clean.slice(0, max - 1).trim()}…` : clean;
+}
+
 function guideReaction(q) {
   const v = answerText(q);
   if (!v) return "Vous avez choisi de ne pas répondre. C’est possible : gardez seulement ce qui vous paraît utile.";
+
+  if (q.personalized) {
+    const signal = SIGNALS.find(item => item.id === q.signal);
+    return signal
+      ? `Votre réponse précise une piste autour de <strong>${escapeHtml(signal.name)}</strong>. Ce n’est pas une conclusion sur vous : c’est un fil que vous pourrez confirmer, nuancer ou laisser de côté.`
+      : "Votre réponse vient préciser le fil qui se dessine, tout en vous laissant libre de l’ajuster.";
+  }
   
   if (q.id === "startIntensity" && +v >= 8) return "Cette situation semble prendre beaucoup de place. Avancez doucement, sans chercher à tout résoudre aujourd’hui.";
   if (q.id === "emotions") return `Vous reconnaissez ${escapeHtml(v.toLowerCase())}. Nommer ce qui est là permet déjà de sortir un peu de la confusion.`;
@@ -402,9 +517,28 @@ function renderSummary() {
   const userQuality = a.quality || a.sensitivity || "mes ressources";
   const mantraText = `« Aujourd'hui, je choisis d'honorer mon besoin de <strong>${escapeHtml(userNeed)}</strong> en m'appuyant sur ma capacité de <strong>${escapeHtml(userQuality)}</strong>. »`;
 
+  const signals = detectedSignals(a).slice(0, 3);
+  const signal = signals[0] || null;
+  const openingWords = shortAnswer(a.reason || a.difficulty);
+  const changeWords = shortAnswer(a.change || a.takeaway);
+  const personalReading = signal ? `
+    <div class="insight personal-reading">
+      <small>Le fil repéré dans vos propres mots</small>
+      <p>Votre parcours semble surtout traversé par <strong>${escapeHtml(signal.name)}</strong>. Cette lecture reste une proposition à ressentir, pas une étiquette.</p>
+      ${openingWords ? `<p><b>Au départ :</b> « ${escapeHtml(openingWords)} »</p>` : ""}
+      ${changeWords ? `<p><b>Ce qui se dégage maintenant :</b> « ${escapeHtml(changeWords)} »</p>` : ""}
+      <p><b>La direction possible :</b> ${escapeHtml(signal.resource)}.</p>
+    </div>` : "";
+
+  const detectedThemes = signals.length ? `
+    <div class="detected-themes" aria-label="Thèmes repérés">
+      ${signals.map(item => `<span>${escapeHtml(item.name)}</span>`).join("")}
+    </div>` : "";
+
   $("#transformationCard").innerHTML = `
     <h2>Le fil essentiel de la séance</h2>
     ${intensityBadge}
+    ${detectedThemes}
     <div class="transformation-flow">
       <div class="transformation-node"><small>Ce qui pèse</small><strong>${escapeHtml(source)}</strong></div>
       <div class="flow-arrow">→</div>
@@ -415,7 +549,8 @@ function renderSummary() {
     <div class="insight">
       <p style="margin: 0 0 10px 0; font-size: 1.05rem;"><strong>Votre phrase d'ancrage :</strong><br>${mantraText}</p>
       ${a.action ? `Premier mouvement choisi : <strong>${escapeHtml(a.action)}</strong>` : ""}
-    </div>`;
+    </div>
+    ${personalReading}`;
 
   $("#summaryContent").innerHTML = STEPS.map((s, i) => `
     <article class="summary-card">
