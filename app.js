@@ -65,8 +65,8 @@ const STEPS = [
       { id: "nowBody", label: "Comment votre corps se sent-il maintenant ?", type: "text" },
       { id: "takeaway", label: "Quelle compréhension souhaitez-vous retenir ?", type: "text" },
       { id: "currentRhythm", label: "À ce moment de votre évolution, de quoi avez-vous surtout besoin ?", type: "chips", options: ["Agir et construire", "Trier et réajuster", "Faire une pause et me retrouver", "Explorer une nouvelle direction"] },
-      { id: "successEvidence", label: "Quel signe concret vous montrera qu’un premier changement est réellement en cours ?", type: "text", hint: "Quelque chose que vous pourrez observer, entendre, ressentir ou faire." },
       { id: "action", label: "Quelle petite action pourrait soutenir ce changement ?", type: "text" },
+      { id: "successEvidence", label: "Quel signe concret vous montrera qu’un premier changement est réellement en cours ?", type: "text", hint: "Quelque chose que vous pourrez observer, entendre, ressentir ou faire." },
       { id: "commitment", label: "À quel point vous sentez-vous prêt à réaliser cette action ?", type: "scale" },
       { id: "endIntensity", label: "Quelle intensité reste-t-il maintenant ?", type: "scale" },
       { id: "afterNeed", label: "De quoi avez-vous besoin après cette séance ?", type: "text" },
@@ -209,7 +209,7 @@ const SIGNALS = [
   },
   {
     id: "loss", name: "la perte et la séparation",
-    words: ["deuil", "mort", "decede", "personne partie", "a disparu", "perdu un proche", "perte d un proche", "separation", "rupture", "abandon", "absence"],
+    words: ["deuil", "mort", "decede", "personne partie", "a disparu", "perdu un proche", "perte d un proche", "separation", "rupture", "abandon", "son absence", "absence d une personne"],
     question: "Qu’est-ce qui vous manque le plus aujourd’hui dans ce lien, cette présence ou cette période de votre vie ?",
     resource: "honorer ce qui compte encore tout en laissant une nouvelle forme de lien ou d’élan devenir possible"
   }
@@ -221,9 +221,10 @@ function signalText(a = state.answers) {
 
 function detectedSignals(a = state.answers) {
   const haystack = signalText(a);
-  const containsSignal = word => word.includes(" ")
-    ? haystack.includes(word)
-    : new RegExp(`(?:^|\\s)${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\w*(?:$|\\s)`).test(haystack);
+  const containsSignal = word => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}${word.includes(" ") ? "" : "\\p{L}*"}(?=$|[^\\p{L}\\p{N}])`, "u").test(haystack);
+  };
   return SIGNALS.map((signal, order) => ({
     ...signal,
     order,
@@ -295,15 +296,26 @@ function hasExplicitCost(a = state.answers) {
   return /\b(me coute|m empeche|me prive|m epuise|perdre du temps|procrast|bloque|freine|limite)\b/.test(allAnswerText(a));
 }
 
+function simpleCase(a = state.answers) {
+  const moderateIntensity = Number.isFinite(+a.startIntensity) && +a.startIntensity < 7;
+  const isolatedOrRecent = includesAny(a.recurrence, ["Situation isolée"]) || /\b(depuis (?:quelques jours|une semaine|deux semaines|[0-9]+ jours))\b/.test(normalized(a.reason));
+  return moderateIntensity && isolatedOrRecent && !relationshipContext(a) && !partsConflict(a);
+}
+
 function baseQuestionVisible(stepIndex, question, a = state.answers) {
+  if (stepIndex === 1 && question.id === "immediateNeed" && Number.isFinite(+a.startIntensity) && +a.startIntensity < 7 && !relationshipContext(a)) return false;
   if (stepIndex === 2 && question.id === "irritation") return relationshipContext(a);
   if (stepIndex === 2 && question.id === "familiar") return pastExplorationRelevant(a) && !hasText(a.commonThread);
   if (stepIndex === 2 && question.id === "pastNeed") return hasText(a.familiar) && !saysNo(a.familiar);
   if (stepIndex === 3 && question.id === "beliefAxis") return hasText(a.belief) && !/\b(autoris\w*|capable|peux faire|droit de)\b/.test(normalized(a.belief));
+  if (stepIndex === 3 && question.id === "themes" && simpleCase(a)) return false;
+  if (stepIndex === 3 && question.id === "value" && simpleCase(a)) return false;
   if (stepIndex === 4 && question.id === "sensitivity") return relationshipContext(a) && includesAny(a.themes, ["Silence", "Rejet", "Abandon", "Manque de place"]);
   if (stepIndex === 4 && question.id === "offering") return /\b(autres|aider|accompagner|soutenir)\b/.test(normalized(a.sensitivity));
   if (stepIndex === 4 && question.id === "selfGift") return hasText(a.offering);
   if (stepIndex === 5 && question.id === "currentRhythm") return !hasText(a.newChoice);
+  if (stepIndex === 5 && question.id === "nowBody" && simpleCase(a)) return false;
+  if (stepIndex === 5 && question.id === "successEvidence" && simpleCase(a) && hasText(a.action)) return false;
   if (stepIndex === 5 && question.id === "afterNeed") {
     return (Number.isFinite(+a.endIntensity) && +a.endIntensity >= 7) || (Number.isFinite(+a.commitment) && +a.commitment < 7);
   }
@@ -361,7 +373,7 @@ function personalizedDeepeners(stepIndex) {
         emotionProbe: true
       });
     }
-    if (hasAny(state.answers.body) && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 8 && !relationshipContext()) {
+    if (hasAny(state.answers.body) && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 8 && !relationshipContext() && !partsConflict()) {
       questions.push({
         id: "bodySignal",
         after: "body",
@@ -481,6 +493,7 @@ function activeQuestions(stepIndex) {
   const genericCandidates = (DEEPENERS[stepIndex] || []).filter(q => {
     if (!q.when(state.answers)) return false;
     if (q.id === "personalImpact" && !(Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 7) && textValue(state.answers.difficulty).trim().split(/\s+/).length < 12) return false;
+    if (q.id === "personalImpact" && detectedSignals().some(signal => signal.id === "fear") && textValue(state.answers.difficulty).trim().split(/\s+/).length >= 7) return false;
     if (q.id === "protectionCost" && hasExplicitCost() && !hasText(state.answers.protectionCost)) return false;
     if (q.id === "protectionCost" && includesAny(state.answers.recurrence, ["Situation isolée"]) && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity < 7) return false;
     if (q.id === "bodySignal" && !(Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 8)) return false;
@@ -495,7 +508,12 @@ function activeQuestions(stepIndex) {
     return true;
   });
   const baseIds = new Set(base.map(q => q.id));
-  const genericRoots = genericCandidates.filter(q => baseIds.has(q.after)).slice(0, genericLimit);
+  const rootCandidates = genericCandidates.filter(q => baseIds.has(q.after));
+  const protectionRoot = stepIndex === 2 && hasAny(state.answers.protection)
+    ? rootCandidates.find(question => question.id === "protectionPurpose")
+    : null;
+  const primaryRoots = rootCandidates.filter(question => question.id !== "protectionPurpose").slice(0, genericLimit);
+  const genericRoots = [...primaryRoots, ...(protectionRoot ? [protectionRoot] : [])];
   const generic = [];
   const addGenericChain = question => {
     if (!question || generic.some(item => item.id === question.id)) return;
@@ -1152,6 +1170,12 @@ function guideReaction(q) {
 }
 
 function feedbackWorthShowing(q) {
+  if (simpleCase()) {
+    return new Set([
+      "reason", "fearCore", "protection", "protectionPurpose", "belief",
+      "need", "newChoice", "takeaway", "action"
+    ]).has(q.id);
+  }
   return new Set([
     "reason", "difficulty", "intention", "emotionWords", "immediateNeed", "triggers", "protection",
     "belief", "need", "value", "newChoice", "takeaway", "action",
