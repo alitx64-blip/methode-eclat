@@ -41,7 +41,8 @@ const STEPS = [
       { id: "themes", label: "Quels thèmes semblent résonner ?", type: "chips", options: ["Rejet", "Abandon", "Injustice", "Dévalorisation", "Impuissance", "Manque de place", "Silence", "Insécurité", "Non-choix", "Séparation", "Autre"] },
       { id: "belief", label: "Quelle phrase intérieure semble se cacher derrière ?", type: "text", hint: "Par exemple : « Je ne suis pas… », « Je n’ai pas le droit de… », « Je dois toujours… »" },
       { id: "beliefAxis", label: "Cette phrase semble surtout limiter…", type: "chips", options: ["Ce que je peux faire", "Ce dont je me crois capable", "Ce que je m’autorise", "Je ne sais pas encore"] },
-      { id: "need", label: "Quel besoin important n’est pas suffisamment entendu ?", type: "text" }
+      { id: "need", label: "Quel besoin important n’est pas suffisamment entendu ?", type: "text" },
+      { id: "value", label: "Quelle valeur importante cherchez-vous à préserver dans cette situation ?", type: "text", hint: "Par exemple : respect, liberté, sécurité, famille, justice, authenticité…" }
     ]
   },
   {
@@ -63,6 +64,7 @@ const STEPS = [
       { id: "change", label: "Qu’est-ce qui a changé depuis le début de la séance ?", type: "text" },
       { id: "nowBody", label: "Comment votre corps se sent-il maintenant ?", type: "text" },
       { id: "takeaway", label: "Quelle compréhension souhaitez-vous retenir ?", type: "text" },
+      { id: "currentRhythm", label: "À ce moment de votre évolution, de quoi avez-vous surtout besoin ?", type: "chips", options: ["Agir et construire", "Trier et réajuster", "Faire une pause et me retrouver", "Explorer une nouvelle direction"] },
       { id: "successEvidence", label: "Quel signe concret vous montrera qu’un premier changement est réellement en cours ?", type: "text", hint: "Quelque chose que vous pourrez observer, entendre, ressentir ou faire." },
       { id: "action", label: "Quelle petite action pourrait soutenir ce changement ?", type: "text" },
       { id: "commitment", label: "À quel point vous sentez-vous prêt à réaliser cette action ?", type: "scale" },
@@ -562,17 +564,45 @@ function beliefReframe(a) {
   return `La pensée « ${shortAnswer(belief, 95)} » n’est pas nécessairement une vérité sur vous. Elle peut être une ancienne interprétation, à confronter désormais à ce que vous vivez et choisissez aujourd’hui.`;
 }
 
+function emotionReading(a) {
+  const emotions = Array.isArray(a.emotions) ? a.emotions.filter(item => item !== "Autre") : [];
+  const meanings = {
+    "Colère": "une limite, une valeur ou une place qui demande à être respectée",
+    "Tristesse": "une perte, une fin ou une transition qui demande à être reconnue",
+    "Peur": "un danger possible, un manque de préparation ou un besoin de sécurité",
+    "Culpabilité": "un conflit possible entre vos actes, vos règles intérieures et ce qui compte pour vous",
+    "Honte": "une peur d’être diminué ou rejeté dans le regard de l’autre",
+    "Impuissance": "un besoin de distinguer ce qui dépend de vous de ce qui ne dépend pas de vous",
+    "Confusion": "un besoin de ralentir, de séparer les faits des interprétations et de retrouver un premier repère"
+  };
+  const signals = emotions.map(item => meanings[item]).filter(Boolean);
+  if (!signals.length) return "";
+  return `L’émotion nommée peut être considérée comme un signal plutôt que comme un problème à supprimer. Elle pourrait indiquer ${signals.slice(0, 2).join(" ; ou encore ")}. Cette piste reste à vérifier dans votre situation concrète.`;
+}
+
+function rhythmReading(value) {
+  const choices = Array.isArray(value) ? value : [value];
+  const map = {
+    "Agir et construire": "Votre rythme actuel semble orienté vers l’action : clarifiez une priorité et protégez aussi des temps de récupération.",
+    "Trier et réajuster": "Votre rythme actuel semble demander du tri : distinguez ce qui fonctionne encore, ce qui doit être ajusté et ce que vous ne voulez plus porter.",
+    "Faire une pause et me retrouver": "Votre rythme actuel semble demander une pause utile : retrouver vos besoins et vos valeurs peut être plus juste que vous forcer à produire immédiatement une nouvelle réponse.",
+    "Explorer une nouvelle direction": "Votre rythme actuel semble ouvert à l’exploration : testez une possibilité à petite échelle avant d’en faire une décision définitive."
+  };
+  return choices.map(choice => map[choice]).filter(Boolean).join(" ");
+}
+
 function buildConclusion(a) {
   const theme = conclusionTheme(a);
   const protection = firstMeaningful(a.protection);
   const protectionGoal = firstMeaningful(a.protectionPurpose) || (protection ? protectionMeaning(a.protection) : "");
   const cost = firstMeaningful(a.protectionCost, a.heldBack, a.difficulty, a.implication);
   const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
+  const value = firstMeaningful(a.value);
   const resource = firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering);
   const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
   const action = firstMeaningful(a.actionSmall, a.action);
   const opening = firstMeaningful(a.reason, a.difficulty);
-  const evidence = [opening, protection || protectionGoal, cost, firstMeaningful(a.belief), need, resource, choice || action].filter(Boolean);
+  const evidence = [opening, protection || protectionGoal, cost, firstMeaningful(a.belief), need || value, resource, choice || action].filter(Boolean);
   const insufficient = evidence.length < 4;
 
   if (insufficient) {
@@ -585,8 +615,10 @@ function buildConclusion(a) {
         : "Vos réponses ne contiennent pas encore assez d’éléments précis pour proposer une lecture fidèle de votre situation.",
       mechanism: "",
       implication: "",
+      emotion: "",
       belief: "",
       shadow: "",
+      rhythm: "",
       awareness: "Ne pas forcer une interprétation est déjà une forme de justesse : la prochaine étape consiste à observer un exemple concret.",
       point: "Je peux prendre le temps de préciser ce que je vis, sans accepter une conclusion qui ne me ressemble pas.",
       action: "",
@@ -618,7 +650,9 @@ function buildConclusion(a) {
       : "";
 
   const awareness = need
-    ? `Votre point de conscience : vous n’avez peut-être pas seulement besoin de changer la situation ; vous avez besoin de reconnaître et d’honorer ${embeddedAnswer(need)}.`
+    ? `Votre point de conscience : vous n’avez peut-être pas seulement besoin de changer la situation ; vous avez besoin de reconnaître et d’honorer ${embeddedAnswer(need)}${value ? `, en restant fidèle à votre valeur de ${embeddedAnswer(value)}` : ""}.`
+    : value
+      ? `Votre point de conscience : votre prochain choix peut être évalué à partir de cette valeur que vous avez nommée — ${shortAnswer(value)}.`
     : `Votre point de conscience : le changement ne consiste pas à supprimer une partie de vous, mais à comprendre ce qu’elle protège afin de retrouver davantage de choix.`;
 
   const point = choice
@@ -634,8 +668,10 @@ function buildConclusion(a) {
     observation,
     mechanism,
     implication,
+    emotion: emotionReading(a),
     belief: beliefReframe(a),
     shadow,
+    rhythm: rhythmReading(a.currentRhythm),
     awareness,
     point,
     action: action || firstMeaningful(a.successEvidence),
@@ -880,7 +916,7 @@ function renderSummary(complete = false) {
       <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
     </div>
     <div class="conclusion-reading">
-      ${[conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.belief, conclusion.shadow].filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
+      ${[conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.belief, conclusion.shadow, conclusion.rhythm].filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
     </div>
     ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h3>Pour construire une conclusion plus juste</h3><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
     <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
