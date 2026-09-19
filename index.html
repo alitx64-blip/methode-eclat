@@ -8,8 +8,36 @@
   <title>Méthode ÉCLAT — D’Âme & de Sens</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    body.eclat-locked { overflow: hidden; }
+    body.eclat-locked > :not(#accessGate) { visibility: hidden; }
+    #accessGate { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; padding: 24px; background: linear-gradient(145deg,#0b1b30,#102b49); }
+    #accessGate[hidden] { display: none; }
+    .access-card { width: min(420px,100%); padding: 32px; border: 1px solid rgba(207,170,99,.65); border-radius: 22px; background: #fffaf4; box-shadow: 0 24px 70px rgba(0,0,0,.35); text-align: center; color: #10243e; }
+    .access-card .access-mark { display:inline-grid; place-items:center; width:54px; height:54px; margin-bottom:14px; border:1px solid #c79a4b; border-radius:50%; color:#a86a4d; font-family:serif; font-size:25px; }
+    .access-card h1 { margin: 0 0 8px; font-size: 29px; }
+    .access-card p { margin: 0 0 22px; color: #566174; line-height: 1.5; }
+    .access-card label { display:block; text-align:left; font-weight:650; }
+    .access-card input[type="password"] { box-sizing:border-box; width:100%; margin-top:8px; padding:13px 14px; border:1px solid #c9c9c9; border-radius:12px; font:inherit; }
+    .access-card .remember { display:flex; gap:9px; align-items:center; margin:14px 0 18px; font-weight:400; }
+    .access-card button { width:100%; padding:13px 18px; border:0; border-radius:12px; background:#10243e; color:white; font:inherit; font-weight:700; cursor:pointer; }
+    #accessError { min-height:1.3em; margin:12px 0 0; color:#a33b32; font-size:14px; }
+  </style>
 </head>
-<body>
+<body class="eclat-locked">
+  <section id="accessGate" aria-labelledby="accessTitle">
+    <form class="access-card" id="accessForm">
+      <span class="access-mark">É</span>
+      <h1 id="accessTitle">Méthode ÉCLAT</h1>
+      <p>Cet espace est protégé. Saisissez le mot de passe pour continuer.</p>
+      <label for="accessPassword">Mot de passe
+        <input id="accessPassword" type="password" autocomplete="current-password" required autofocus>
+      </label>
+      <label class="remember"><input id="rememberAccess" type="checkbox" checked> Rester connecté sur cet appareil</label>
+      <button type="submit">Entrer</button>
+      <p id="accessError" role="alert" aria-live="polite"></p>
+    </form>
+  </section>
   <header class="topbar">
     <button class="brand" id="homeBtn" type="button" aria-label="Retour à l’accueil">
       <span class="brand-mark">D<span>’</span></span>
