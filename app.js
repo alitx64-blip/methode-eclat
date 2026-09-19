@@ -377,7 +377,9 @@ function renderJourneyPanel(forceOpen = false) {
           <span class="timeline-dot">${ordered.length - index}</span>
           <div><small>${formatDate(item.completedAt)}</small><h3>${escapeHtml(sessionTheme(item))}</h3>
           <p>${escapeHtml(evolutionLabel(item.answers?.startIntensity, item.answers?.endIntensity))}</p>
-          ${item.answers?.takeaway ? `<blockquote>« ${escapeHtml(shortAnswer(item.answers.takeaway, 120))} »</blockquote>` : ""}</div>
+          ${item.conclusion?.point
+            ? `<blockquote>Point ÉCLAT : « ${escapeHtml(shortAnswer(item.conclusion.point, 150))} »</blockquote>`
+            : item.answers?.takeaway ? `<blockquote>« ${escapeHtml(shortAnswer(item.answers.takeaway, 120))} »</blockquote>` : ""}</div>
         </article>`).join("")}
     </div>`;
 
@@ -502,6 +504,88 @@ function shortAnswer(value, max = 150) {
   const clean = textValue(value).replace(/\s+/g, " ").trim();
   if (!clean) return "";
   return clean.length > max ? `${clean.slice(0, max - 1).trim()}…` : clean;
+}
+
+function firstMeaningful(...values) {
+  return values.map(value => textValue(value).replace(/\s+/g, " ").trim()).find(value => value.length >= 3) || "";
+}
+
+function protectionMeaning(value) {
+  const map = {
+    "Je fuis": "éviter d’être à nouveau atteint ou débordé",
+    "Je contrôle": "réduire l’incertitude et retrouver une sensation de sécurité",
+    "Je me tais": "préserver le lien ou éviter le conflit",
+    "Je m’adapte": "rester accepté et ne pas risquer de décevoir",
+    "Je me défends": "protéger votre valeur, votre place ou vos limites",
+    "Je me coupe de mes émotions": "continuer à avancer sans être submergé",
+    "Autre": "vous protéger d’une conséquence qui vous paraît difficile"
+  };
+  const selected = Array.isArray(value) ? value[0] : value;
+  return map[selected] || "vous protéger avec les moyens disponibles à ce moment-là";
+}
+
+function beliefReframe(a) {
+  const belief = firstMeaningful(a.belief);
+  const need = firstMeaningful(a.need, a.immediateNeed, a.pastNeed, "davantage de sécurité intérieure");
+  const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
+  if (!belief) return `Vous pouvez progressivement vous autoriser ${choice || `à entendre votre besoin de ${need}`} sans attendre que toute peur ait disparu.`;
+  if (containsRule(belief)) return `La règle « ${shortAnswer(belief, 95)} » a peut-être cherché à vous maintenir en sécurité. Elle peut aujourd’hui devenir un guide plus souple : vous autoriser ${choice || `à respecter votre besoin de ${need}`}, selon la situation.`;
+  if (containsAbsolute(belief)) return `La phrase « ${shortAnswer(belief, 95)} » ressemble à une conclusion devenue générale. Les exceptions et les petits changements peuvent vous aider à construire une lecture plus souple et plus juste.`;
+  return `La pensée « ${shortAnswer(belief, 95)} » n’est pas nécessairement une vérité sur vous. Elle peut être une ancienne interprétation, à confronter désormais à ce que vous vivez et choisissez aujourd’hui.`;
+}
+
+function buildConclusion(a) {
+  const signal = leadingSignal(a);
+  const theme = signal?.name || firstMeaningful(a.coreWord, a.themes, "ce qui vous préoccupe actuellement");
+  const protection = firstMeaningful(a.protection);
+  const protectionGoal = firstMeaningful(a.protectionPurpose, protectionMeaning(a.protection));
+  const cost = firstMeaningful(a.protectionCost, a.heldBack, a.difficulty, a.implication);
+  const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
+  const resource = firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering);
+  const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
+  const action = firstMeaningful(a.actionSmall, a.action);
+  const opening = firstMeaningful(a.reason, a.difficulty);
+
+  const observation = opening
+    ? `Vous êtes arrivé avec une situation formulée ainsi : « ${shortAnswer(opening, 160)} ». Dans l’ensemble de vos réponses, le fil qui ressort le plus concerne ${theme}.`
+    : `Dans l’ensemble de vos réponses, le fil qui ressort le plus concerne ${theme}.`;
+
+  const mechanism = protection
+    ? `Face à ce qui vous touche, vous semblez avoir appris à réagir en disant : « ${shortAnswer(protection, 90)} ». Ce fonctionnement a probablement cherché à ${protectionGoal}. Il ne dit pas qui vous êtes : il décrit une stratégie devenue familière.`
+    : `Vos réponses laissent penser qu’une partie de vous essaie encore de ${protectionGoal}. Cette réaction n’est pas un défaut : elle a pu être une manière de vous adapter et de préserver quelque chose d’important.`;
+
+  const implication = cost
+    ? `Aujourd’hui, cette protection semble aussi avoir un coût : « ${shortAnswer(cost, 155)} ». La prise de conscience centrale est que ce qui vous a aidé à un moment peut maintenant limiter ce que vous souhaitez vivre.`
+    : `La prise de conscience centrale est qu’un fonctionnement autrefois protecteur peut continuer automatiquement, même lorsqu’il ne correspond plus entièrement à la situation présente.`;
+
+  const shadow = resource
+    ? `Derrière la difficulté apparaît aussi une ressource : ${resource}. Ce n’est pas le problème qui crée cette qualité ; votre parcours montre plutôt qu’elle était déjà là et qu’elle demande maintenant à être utilisée aussi pour vous.`
+    : need
+      ? `Ce qui semble chercher à reprendre sa place n’est pas seulement la disparition du problème, mais votre besoin de ${need}. L’entendre peut vous aider à choisir autrement sans rejeter la partie de vous qui a voulu vous protéger.`
+      : `Ce qui cherche à reprendre sa place semble être une manière plus libre de choisir, sans devoir lutter contre vous-même.`;
+
+  const awareness = need
+    ? `Votre point de conscience : vous n’avez peut-être pas seulement besoin de changer la situation ; vous avez besoin de reconnaître et d’honorer ${need}.`
+    : `Votre point de conscience : le changement ne consiste pas à supprimer une partie de vous, mais à comprendre ce qu’elle protège afin de retrouver davantage de choix.`;
+
+  const point = choice
+    ? `Je peux reconnaître ce qui m’a protégé, sans le laisser décider à ma place, et commencer à ${choice}.`
+    : resource
+      ? `Je peux reconnaître ce qui m’a protégé et m’appuyer maintenant sur ${resource}.`
+      : `Je peux accueillir ce que je comprends aujourd’hui et choisir un premier mouvement plus juste pour moi.`;
+
+  return {
+    theme,
+    observation,
+    mechanism,
+    implication,
+    belief: beliefReframe(a),
+    shadow,
+    awareness,
+    point,
+    action: action || firstMeaningful(a.successEvidence),
+    createdAt: new Date().toISOString()
+  };
 }
 
 function guideReaction(q) {
@@ -657,8 +741,12 @@ function start(fresh = false) {
 
 function renderSummary(complete = false) {
   collect();
-  if (complete) archiveCompletedSession();
   const a = state.answers;
+  const conclusion = buildConclusion(a);
+  if (complete) {
+    state.conclusion = conclusion;
+    archiveCompletedSession();
+  }
   const themes = Array.isArray(a.themes) ? a.themes.join(" · ") : a.themes;
   const source = a.coreWord || themes || "À préciser";
   const passage = a.opposite || a.need || "À faire émerger";
@@ -699,6 +787,7 @@ function renderSummary(complete = false) {
         <div><span>Thème précédent</span><strong>${escapeHtml(sessionTheme(previous))}</strong></div>
         <div><span>Thème actuel</span><strong>${escapeHtml(signal ? signal.name : (a.coreWord || "À préciser"))}</strong></div>
       </div>
+      ${previous.conclusion?.point ? `<p><b>Votre précédent point ÉCLAT :</b> « ${escapeHtml(shortAnswer(previous.conclusion.point, 170))} »</p>` : ""}
       <p>${previous.actionCompletedAt ? "Vous aviez réalisé le petit pas choisi." : "Votre ancien petit pas peut encore être repris, ajusté ou laissé de côté si votre besoin a changé."}</p>
     </div>` : `
     <div class="evolution-comparison first">
@@ -726,6 +815,27 @@ function renderSummary(complete = false) {
     ${personalReading}
     ${comparison}
     ${complete ? `<div class="return-invitation"><strong>Votre prochain rendez-vous avec vous-même</strong><p>Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît. Votre nouveau bilan sera comparé à celui-ci.</p></div>` : ""}`;
+
+  $(".eclat-conclusion")?.remove();
+  const conclusionCard = document.createElement("section");
+  conclusionCard.className = "eclat-conclusion";
+  conclusionCard.innerHTML = `
+    <div class="conclusion-title">
+      <div><p class="eyebrow">La lecture de votre parcours</p><h2>Votre conclusion ÉCLAT</h2></div>
+      <span>À ressentir, nuancer ou laisser de côté</span>
+    </div>
+    <div class="conclusion-reading">
+      <p>${escapeHtml(conclusion.observation)}</p>
+      <p>${escapeHtml(conclusion.mechanism)}</p>
+      <p>${escapeHtml(conclusion.implication)}</p>
+      <p>${escapeHtml(conclusion.belief)}</p>
+      <p>${escapeHtml(conclusion.shadow)}</p>
+    </div>
+    <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
+    <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
+    ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
+    <p class="conclusion-source">Cette lecture croise la situation, son implication, la croyance possible, sa fonction protectrice, la ressource restée en retrait et le choix formulé dans vos réponses. Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>`;
+  $("#transformationCard").after(conclusionCard);
 
   $("#summaryContent").innerHTML = STEPS.map((s, i) => `
     <article class="summary-card">
