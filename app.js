@@ -293,15 +293,17 @@ function pastExplorationRelevant(a = state.answers) {
 }
 
 function extractExplicitCost(a = state.answers) {
-  const excluded = new Set(["protectionCost", "heldBack"]);
-  const candidates = Object.entries(a || {})
-    .filter(([key, value]) => !excluded.has(key) && typeof value === "string" && value.trim())
-    .map(([, value]) => value.trim());
   const patterns = [
     /(?:ça|cela|ca)\s+(?:(?:m[’']?|me)\s*)?(?:épuise\w*|epuise\w*|bloque\w*|freine\w*|empêche\w*|empeche\w*|prive\w*|limite\w*)[^.!?;:\n…]*/iu,
     /je\s+(?:perds?\b[^.!?;:\n…]*\btemps|passe\s+à\s+côté\b[^.!?;:\n…]*|n[’']?ose\s+plus\b[^.!?;:\n…]*|me\s+prive\b[^.!?;:\n…]*|procrastine\w*\b[^.!?;:\n…]*)/iu,
     /(?:m[’']?|me)\s*(?:épuise\w*|epuise\w*|bloque\w*|freine\w*|empêche\w*|empeche\w*)[^.!?;:\n…]*/iu
   ];
+  const protectionPattern = /\b(controle\w*|controler|fuis|fuir|evite\w*|me tais|se taire|me coupe\w*|couper de mes emotions|m adapte\w*|m adapter|me defends?\w*|me defendre|repousse\w*|procrastine\w*)\b/;
+  const directlyLinked = new Set(["protection", "protectionPurpose"]);
+  const candidates = Object.entries(a || {})
+    .filter(([key, value]) => !["protectionCost", "heldBack"].includes(key) && typeof value === "string" && value.trim())
+    .filter(([key, value]) => directlyLinked.has(key) || protectionPattern.test(normalized(value)))
+    .map(([, value]) => value.trim());
   for (const answer of candidates) {
     const matches = patterns.map(pattern => answer.match(pattern)).filter(Boolean).sort((left, right) => left.index - right.index);
     if (matches.length) return matches[0][0].trim().replace(/^(?:et|mais)\s+/iu, "");
