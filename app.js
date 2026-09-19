@@ -344,4 +344,231 @@ function renderStep() {
     <p class="step-intro">${s.intro}</p>
     <div class="guidance">${GUIDANCE[state.step]}</div>
     ${pause}
-    ${st
+    ${state.step === 4 ? resourceSuggestion() : ""}
+  ` : "";
+
+  stepContent.innerHTML = `
+    <div class="conversation">
+      ${intro}
+      <div class="guide-bubble ${state.feedback ? 'feedback' : ''}">
+        <button type="button" class="audio-btn" id="speakGuideBtn" title="Écouter la question">🔊</button>
+        <span class="guide-name">Votre guide ÉCLAT</span>
+        <p id="guideMessage">${state.feedback ? guideReaction(q) : "Prenez votre temps. Une seule question vous est proposée."}</p>
+      </div>
+      ${state.feedback ? '' : `
+        <div class="single-question">
+          ${question(q)}
+          <p class="skip-note">Vous pouvez continuer sans répondre.</p>
+        </div>
+      `}
+    </div>
+  `;
+
+  if (!state.feedback) bind(q);
+
+  $("#previousBtn").style.visibility = (!state.step && !state.question && !state.feedback) ? "hidden" : "visible";
+  $("#nextBtn").innerHTML = state.feedback ? "Continuer →" : "Confier ma réponse →";
+}
+
+function collect() {
+  const nameInput = $("#sessionName");
+  if (nameInput) state.name = nameInput.value;
+  save();
+}
+
+function start(fresh = false) {
+  if (fresh) {
+    state = { step: 0, question: 0, feedback: false, name: "", answers: {}, updatedAt: null };
+    save();
+  }
+  const nameInput = $("#sessionName");
+  if (nameInput) nameInput.value = state.name || "";
+  show(session);
+  renderStep();
+}
+
+function renderSummary() {
+  collect();
+  const a = state.answers;
+  const themes = Array.isArray(a.themes) ? a.themes.join(" · ") : a.themes;
+  const source = a.coreWord || themes || "À préciser";
+  const passage = a.opposite || a.need || "À faire émerger";
+  const treasure = a.quality || a.sensitivity || "À reconnaître";
+  
+  const hasIntensity = a.startIntensity !== undefined && a.endIntensity !== undefined;
+  const intensityBadge = hasIntensity ? `<div class="intensity-badge">Intensité ressentie : ${a.startIntensity}/10 → ${a.endIntensity}/10</div>` : "";
+
+  const userNeed = a.need || a.immediateNeed || "mon besoin profond";
+  const userQuality = a.quality || a.sensitivity || "mes ressources";
+  const mantraText = `« Aujourd'hui, je choisis d'honorer mon besoin de <strong>${escapeHtml(userNeed)}</strong> en m'appuyant sur ma capacité de <strong>${escapeHtml(userQuality)}</strong>. »`;
+
+  $("#transformationCard").innerHTML = `
+    <h2>Le fil essentiel de la séance</h2>
+    ${intensityBadge}
+    <div class="transformation-flow">
+      <div class="transformation-node"><small>Ce qui pèse</small><strong>${escapeHtml(source)}</strong></div>
+      <div class="flow-arrow">→</div>
+      <div class="transformation-node"><small>Ce qui est recherché</small><strong>${escapeHtml(passage)}</strong></div>
+      <div class="flow-arrow">→</div>
+      <div class="transformation-node"><small>La ressource</small><strong>${escapeHtml(treasure)}</strong></div>
+    </div>
+    <div class="insight">
+      <p style="margin: 0 0 10px 0; font-size: 1.05rem;"><strong>Votre phrase d'ancrage :</strong><br>${mantraText}</p>
+      ${a.action ? `Premier mouvement choisi : <strong>${escapeHtml(a.action)}</strong>` : ""}
+    </div>`;
+
+  $("#summaryContent").innerHTML = STEPS.map((s, i) => `
+    <article class="summary-card">
+      <h3>${s.title}</h3>
+      ${activeQuestions(i).map(q => {
+        let v = a[q.id];
+        if (Array.isArray(v)) v = v.join(" · ");
+        const empty = v === undefined || v === "";
+        return `
+          <div class="summary-item ${q.adaptive ? 'summary-adaptive' : ''}">
+            <b>${q.label}</b>
+            <p class="${empty ? 'empty-answer' : ''}">${empty ? 'Non renseigné' : escapeHtml(v) + (q.type === 'scale' ? ' / 10' : '')}</p>
+          </div>`;
+      }).join("")}
+    </article>
+  `).join("");
+
+  show(summary);
+}
+
+// Synthèse Vocale (Text-to-Speech)
+function speakGuideText() {
+  const msgEl = $("#guideMessage");
+  if (!msgEl || !('speechSynthesis' in window)) return;
+  
+  window.speechSynthesis.cancel();
+  const text = msgEl.textContent || msgEl.innerText;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "fr-FR";
+  utterance.rate = 0.92;
+  utterance.pitch = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "speakGuideBtn") {
+    speakGuideText();
+  }
+});
+
+// Respiration / Cohérence Cardiaque
+const breathDlg = $("#breathDialog");
+const breathBtn = $("#breathBtn");
+const closeBreath = $("#closeBreath");
+const breathText = $("#breathText");
+let breathInterval = null;
+
+if (breathDlg && breathBtn) {
+  breathBtn.onclick = () => {
+    breathDlg.showModal();
+    let isInspire = true;
+    breathText.textContent = "Inspirer doucement...";
+    
+    breathInterval = setInterval(() => {
+      isInspire = !isInspire;
+      breathText.textContent = isInspire ? "Inspirer doucement..." : "Expirer profondément...";
+    }, 5000);
+  };
+
+  const stopBreath = () => {
+    if (breathInterval) clearInterval(breathInterval);
+    breathDlg.close();
+  };
+
+  if (closeBreath) closeBreath.onclick = stopBreath;
+  breathDlg.onclick = (e) => { if (e.target === breathDlg) stopBreath(); };
+}
+
+// Export JSON
+const exportBtn = $("#exportBtn");
+if (exportBtn) {
+  exportBtn.onclick = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const downloadAnchor = document.createElement('a');
+    const filename = `parcours-eclat-${state.name || 'session'}-${new Date().toISOString().slice(0, 10)}.json`;
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", filename);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+}
+
+// Événements
+$("#newSession").onclick = () => {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved && Object.keys(state.answers).length && !confirm("Commencer un nouveau parcours effacera vos réponses actuelles. Continuer ?")) return;
+  } catch (e) {}
+  start(true);
+};
+
+$("#resumeSession").onclick = () => start(false);
+
+$("#previousBtn").onclick = () => {
+  if (state.feedback) {
+    state.feedback = false;
+  } else if (state.question > 0) {
+    state.question--;
+  } else if (state.step > 0) {
+    state.step--;
+    state.question = activeQuestions(state.step).length - 1;
+  }
+  save();
+  renderStep();
+};
+
+$("#nextBtn").onclick = () => {
+  const currentQuestions = activeQuestions(state.step);
+
+  if (!state.feedback) {
+    state.feedback = true;
+    save();
+    renderStep();
+    return;
+  }
+
+  state.feedback = false;
+  if (state.question < currentQuestions.length - 1) {
+    state.question++;
+  } else if (state.step < STEPS.length - 1) {
+    state.step++;
+    state.question = 0;
+  } else {
+    return renderSummary();
+  }
+  save();
+  renderStep();
+};
+
+$("#summaryBtn").onclick = renderSummary;
+$("#backToSession").onclick = () => { show(session); renderStep(); };
+$("#printBtn").onclick = () => window.print();
+$("#homeBtn").onclick = () => show(welcome);
+
+const nameInput = $("#sessionName");
+if (nameInput) nameInput.oninput = e => { state.name = e.target.value; save(); };
+
+$("#resetBtn").onclick = () => {
+  if (confirm("Effacer définitivement toutes les réponses de ce parcours ?")) {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    state = { step: 0, question: 0, feedback: false, name: "", answers: {}, updatedAt: null };
+    $("#resumeSession").hidden = true;
+    show(welcome);
+  }
+};
+
+const dlg = $("#privacyDialog");
+if (dlg) {
+  $("#privacyBtn").onclick = () => dlg.showModal();
+  const closeBtn = dlg.querySelector(".dialog-close");
+  if (closeBtn) closeBtn.onclick = () => dlg.close();
+  dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
+}
+
+load();
