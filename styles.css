@@ -951,6 +951,14 @@ main {
 .conclusion-action p { margin: 0; color: var(--blue); font-weight: 600; }
 .conclusion-source { margin: 22px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
+.ai-summary-panel { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.ai-summary-panel > button { width: auto; }
+.ai-summary-note { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.ai-summary-result { margin-top: 22px; padding: 22px; border: 1px solid rgba(197, 163, 90, .48); border-radius: 16px; background: rgba(255, 255, 255, .72); }
+.ai-summary-result h3 { margin: 0 0 16px; color: var(--blue); font: 400 26px/1.2 Italiana, serif; }
+.ai-summary-text p { margin: 0 0 13px; color: #3f4852; line-height: 1.72; }
+.ai-summary-error { margin: 0; color: var(--terracotta); line-height: 1.6; }
+
 .recurring-theme {
   margin-top: 20px;
   padding: 18px 20px;
