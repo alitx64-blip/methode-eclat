@@ -292,8 +292,25 @@ function pastExplorationRelevant(a = state.answers) {
   return includesAny(a.recurrence, ["Cela revient parfois", "Cela revient souvent"]) || /\b(familier|deja|souvenir|avant|autrefois|enfance|se repete|revient)\b/.test(text);
 }
 
+function extractExplicitCost(a = state.answers) {
+  const excluded = new Set(["protectionCost", "heldBack"]);
+  const candidates = Object.entries(a || {})
+    .filter(([key, value]) => !excluded.has(key) && typeof value === "string" && value.trim())
+    .map(([, value]) => value.trim());
+  const patterns = [
+    /(?:ça|cela|ca)\s+(?:(?:m[’']?|me)\s*)?(?:épuise\w*|epuise\w*|bloque\w*|freine\w*|empêche\w*|empeche\w*|prive\w*|limite\w*)[^.!?;:\n…]*/iu,
+    /je\s+(?:perds?\b[^.!?;:\n…]*\btemps|passe\s+à\s+côté\b[^.!?;:\n…]*|n[’']?ose\s+plus\b[^.!?;:\n…]*|me\s+prive\b[^.!?;:\n…]*|procrastine\w*\b[^.!?;:\n…]*)/iu,
+    /(?:m[’']?|me)\s*(?:épuise\w*|epuise\w*|bloque\w*|freine\w*|empêche\w*|empeche\w*)[^.!?;:\n…]*/iu
+  ];
+  for (const answer of candidates) {
+    const matches = patterns.map(pattern => answer.match(pattern)).filter(Boolean).sort((left, right) => left.index - right.index);
+    if (matches.length) return matches[0][0].trim().replace(/^(?:et|mais)\s+/iu, "");
+  }
+  return "";
+}
+
 function hasExplicitCost(a = state.answers) {
-  return /\b(me coute|m empeche|me prive|m epuise|perdre du temps|procrast|bloque|freine|limite)\b/.test(allAnswerText(a));
+  return Boolean(extractExplicitCost(a));
 }
 
 function simpleCase(a = state.answers) {
@@ -937,7 +954,7 @@ function buildConclusion(a) {
   const theme = conclusionTheme(a);
   const protection = firstMeaningful(a.protection);
   const protectionGoal = firstMeaningful(a.protectionPurpose) || (protection ? protectionMeaning(a.protection) : "");
-  const cost = firstMeaningful(a.protectionCost, a.heldBack);
+  const cost = firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a));
   const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
   const value = firstMeaningful(a.value);
   const resource = firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering);
@@ -1051,7 +1068,7 @@ function usefulAnswersForAI(a) {
     repetitions: firstMeaningful(a.commonThread, a.recurrence),
     protection: a.protection,
     fonctionProtection: a.protectionPurpose,
-    coutProtection: firstMeaningful(a.protectionCost, a.heldBack),
+    coutProtection: firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a)),
     croyance: a.belief,
     besoin: firstMeaningful(a.need, a.immediateNeed, a.pastNeed),
     valeur: a.value,
