@@ -1,5 +1,5 @@
-// Modèle open-weight actuellement gratuit ; surcharge possible avec OPENROUTER_MODEL.
-const DEFAULT_MODEL = "qwen/qwen3.8-flash";
+// Variante explicitement gratuite. Une surcharge n'est acceptée que si elle reste en :free.
+const DEFAULT_MODEL = "qwen/qwen3.8-27b:free";
 const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
@@ -35,6 +35,8 @@ export async function onRequestPost({ request, env }) {
   if (serialized.length < 40 || serialized.length > MAX_BODY_LENGTH) return json({ message: "Réponses insuffisantes ou trop volumineuses." }, 400);
 
   try {
+    const requestedModel = String(env.OPENROUTER_MODEL || "").trim();
+    const model = requestedModel.endsWith(":free") ? requestedModel : DEFAULT_MODEL;
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -44,7 +46,7 @@ export async function onRequestPost({ request, env }) {
         "x-title": "ÉCLAT"
       },
       body: JSON.stringify({
-        model: env.OPENROUTER_MODEL || DEFAULT_MODEL,
+        model,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `Réponses du parcours ÉCLAT :\n${serialized}` }
@@ -57,7 +59,7 @@ export async function onRequestPost({ request, env }) {
     const data = await response.json();
     const summary = data?.choices?.[0]?.message?.content?.trim();
     if (!summary) return json({ message: "Synthèse indisponible." }, 502);
-    return json({ summary, model: data.model || env.OPENROUTER_MODEL || DEFAULT_MODEL });
+    return json({ summary, model: data.model || model });
   } catch {
     return json({ message: "Synthèse indisponible." }, 502);
   }
