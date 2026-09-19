@@ -905,6 +905,93 @@ main {
   margin: 8px 0 0;
 }
 
+/* Progression dans le temps */
+.journey-panel {
+  margin-top: 34px;
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid rgba(197, 163, 90, 0.5);
+  border-radius: 22px;
+  background: rgba(255, 253, 248, 0.82);
+  box-shadow: 0 18px 45px rgba(16, 36, 62, 0.08);
+}
+
+.journey-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.journey-heading .eyebrow { margin-bottom: 8px; }
+.journey-heading h2 {
+  margin: 0;
+  color: var(--blue);
+  font: 400 clamp(30px, 4vw, 44px)/1.1 Italiana, serif;
+}
+
+.journey-count, .action-done {
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(197, 163, 90, 0.14);
+  color: #77591f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.journey-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 24px 0;
+}
+
+.journey-stats div {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.journey-stats strong, .journey-stats span { display: block; }
+.journey-stats strong { color: var(--terra); font: 400 30px Italiana, serif; }
+.journey-stats span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+.next-step-card {
+  border-left: 3px solid var(--terra);
+  border-radius: 0 15px 15px 0;
+  padding: 16px 18px;
+  background: #fff7f2;
+}
+
+.next-step-card small { color: var(--terra); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.next-step-card p { margin: 8px 0 13px; line-height: 1.5; }
+.compact { padding: 8px 13px; font-size: 12px; }
+
+.journey-timeline { margin-top: 25px; }
+.timeline-item { display: grid; grid-template-columns: 32px 1fr; gap: 14px; position: relative; padding-bottom: 22px; }
+.timeline-item:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 31px; bottom: 0; width: 1px; background: var(--gold-soft); }
+.timeline-dot { width: 31px; height: 31px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 11px; z-index: 1; }
+.timeline-item small { color: var(--muted); }
+.timeline-item h3 { margin: 2px 0 4px; color: var(--blue); font-size: 16px; }
+.timeline-item p { margin: 0; color: var(--terra); font-size: 13px; }
+.timeline-item blockquote { margin: 9px 0 0; color: var(--muted); font-size: 13px; font-style: italic; }
+.journey-empty { margin: 0; color: var(--muted); line-height: 1.6; }
+
+.evolution-comparison, .return-invitation {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.2);
+}
+.evolution-comparison > small { color: var(--gold-soft); text-transform: uppercase; letter-spacing: .1em; }
+.comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 15px 0; }
+.comparison-grid div { padding: 13px; border-radius: 11px; background: rgba(255,255,255,.08); }
+.comparison-grid span, .comparison-grid strong { display: block; }
+.comparison-grid span { color: rgba(255,255,255,.65); font-size: 11px; margin-bottom: 5px; }
+.return-invitation { border-color: var(--gold); }
+.return-invitation p { margin: 7px 0 0; }
+
 /* Modales */
 dialog {
   border: 1px solid var(--gold-soft);
@@ -1057,6 +1144,13 @@ dialog p:not(.eyebrow) {
     font-size: 11px;
     padding: 6px 10px;
   }
+
+  #journeyBtn { display: none; }
+  .journey-panel { margin-top: 26px; padding: 20px; }
+  .journey-heading { display: block; }
+  .journey-count { display: inline-block; margin-top: 12px; }
+  .journey-stats { grid-template-columns: 1fr; }
+  .comparison-grid { grid-template-columns: 1fr; }
 }
 
 /* Format d'Impression / Export PDF */
