@@ -905,6 +905,48 @@ main {
   margin: 8px 0 0;
 }
 
+/* Conclusion personnalisée */
+.eclat-conclusion {
+  margin: 24px 0 28px;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(197, 163, 90, .65);
+  border-radius: 22px;
+  background: linear-gradient(145deg, #fffdf8, #f8f0e4);
+  box-shadow: 0 20px 55px rgba(16, 36, 62, .1);
+}
+
+.conclusion-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.conclusion-title .eyebrow { margin-bottom: 8px; }
+.conclusion-title h2 { margin: 0; color: var(--blue); font: 400 clamp(32px, 4vw, 48px)/1.1 Italiana, serif; }
+.conclusion-title > span { max-width: 210px; color: var(--muted); font-size: 12px; text-align: right; line-height: 1.5; }
+.conclusion-reading { margin: 25px 0; }
+.conclusion-reading p { color: #3f4852; line-height: 1.75; margin: 0 0 14px; }
+
+.awareness-point, .eclat-point, .conclusion-action {
+  margin-top: 16px;
+  padding: 19px 21px;
+  border-radius: 15px;
+}
+.awareness-point { background: rgba(184, 101, 77, .09); border-left: 3px solid var(--terra); }
+.awareness-point small, .eclat-point small, .conclusion-action small { display: block; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; font-weight: 800; }
+.awareness-point small { color: var(--terra); }
+.awareness-point strong { color: var(--blue); line-height: 1.6; }
+.eclat-point { background: var(--blue); color: #fff; border: 1px solid var(--gold); }
+.eclat-point small { color: var(--gold-soft); }
+.eclat-point blockquote { margin: 0; font: 400 clamp(20px, 2.6vw, 28px)/1.45 Italiana, serif; }
+.conclusion-action { border: 1px solid var(--gold-soft); background: #fff; }
+.conclusion-action small { color: #92712d; }
+.conclusion-action p { margin: 0; color: var(--blue); font-weight: 600; }
+.conclusion-source { margin: 22px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+
 /* Progression dans le temps */
 .journey-panel {
   margin-top: 34px;
@@ -1151,6 +1193,8 @@ dialog p:not(.eyebrow) {
   .journey-count { display: inline-block; margin-top: 12px; }
   .journey-stats { grid-template-columns: 1fr; }
   .comparison-grid { grid-template-columns: 1fr; }
+  .conclusion-title { display: block; }
+  .conclusion-title > span { display: block; max-width: none; margin-top: 12px; text-align: left; }
 }
 
 /* Format d'Impression / Export PDF */
