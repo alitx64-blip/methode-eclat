@@ -250,11 +250,19 @@ function severeDistressDetected(a = state.answers) {
 function partsConflict(a = state.answers) {
   const text = allAnswerText(a);
   const pairs = [
-    { first: "la liberté ou le changement", second: "la sécurité ou la stabilité", left: ["liberte", "libre", "quitter", "changer", "autonomie", "independance"], right: ["securite", "stabilite", "stable", "salaire", "peur de perdre", "risque"] },
-    { first: "le repos ou le ralentissement", second: "le devoir d’avancer ou de rester productif", left: ["repos", "reposer", "souffler", "pause", "ralentir"], right: ["culpabil", "je dois", "obligation", "productif", "travailler"] },
-    { first: "le besoin d’être entendu ou de vous exprimer", second: "la protection du lien ou l’évitement du conflit", left: ["entendu", "exprimer", "parler", "dire ce que"], right: ["me tais", "silence", "eviter le conflit", "dispute", "peur du conflit"] }
+    { first: "la liberté ou le changement", second: "la sécurité ou la stabilité", left: ["liberte", "etre libre", "quitter", "changer de metier", "reconversion", "me lancer", "nouveau projet", "autonomie", "independance"], right: ["securite", "stabilite", "revenu stable", "revenu regulier", "salaire", "peur de perdre", "credit", "emprunt", "charges", "trois enfants", "mes enfants", "risque financier"] },
+    { first: "le repos ou le ralentissement", second: "l’obligation, la responsabilité ou le devoir d’avancer", left: ["repos", "me reposer", "souffler", "faire une pause", "ralentir", "lever le pied"], right: ["culpabil", "je dois", "obligation", "responsabilite", "productif", "travailler", "laisser tomber", "comptent sur moi", "tout le monde", "m occuper de"] },
+    { first: "le besoin d’être entendu ou de vous exprimer", second: "la protection du lien ou l’évitement du conflit", left: ["etre entendu", "m exprimer", "dire ce que je pense", "prendre la parole", "faire entendre", "oser dire"], right: ["me tais", "silence", "eviter le conflit", "eviter une dispute", "dispute", "peur du conflit", "ne pas blesser", "preserver le lien", "se facher"] }
   ];
   return pairs.find(pair => pair.left.some(word => text.includes(word)) && pair.right.some(word => text.includes(word))) || null;
+}
+
+function canDeepenFear(value, level) {
+  const text = normalized(textValue(value));
+  if (!text || ["je ne sais pas", "aucune idee", "rien", "stop", "je prefere arreter"].some(answer => text === answer)) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  const minimumWords = level <= 1 ? 4 : level === 2 ? 6 : 8;
+  return words.length >= minimumWords;
 }
 
 function personalizedDeepeners(stepIndex) {
@@ -334,26 +342,35 @@ function personalizedDeepeners(stepIndex) {
 
     const fearIsCentral = includesAny(state.answers.emotions, ["Peur", "Anxiété / angoisse"]) || leadingSignal()?.id === "fear";
     if (fearIsCentral && hasText(state.answers.fearScenario)) {
-      questions.push({
+      const fearQuestions = [];
+      fearQuestions.push({
         id: "fearImplication1",
         after: "fearScenario",
         label: "Si cela arrivait, qu’est-ce que cela impliquerait pour vous ?",
         hint: "Vous pouvez laisser cette question sans réponse pour arrêter l’approfondissement.",
         type: "text", adaptive: true, personalized: true, fearProbe: true
       });
-      if (hasText(state.answers.fearImplication1)) questions.push({
-        id: "fearImplication2",
-        after: "fearImplication1",
-        label: "Et si cette conséquence arrivait, qu’est-ce que cela impliquerait plus profondément pour vous ?",
-        hint: "Vous pouvez vous arrêter ici si aller plus loin ne vous semble pas utile.",
-        type: "text", adaptive: true, personalized: true, fearProbe: true
-      });
-      if (hasText(state.answers.fearImplication2)) questions.push({
+      let lastId = "fearImplication1";
+      for (let level = 1; level < 4; level++) {
+        const currentId = `fearImplication${level}`;
+        if (!hasText(state.answers[currentId]) || !canDeepenFear(state.answers[currentId], level)) break;
+        const nextId = `fearImplication${level + 1}`;
+        fearQuestions.push({
+          id: nextId,
+          after: currentId,
+          label: level === 1 ? "Et si cette conséquence se produisait, qu’est-ce que cela impliquerait pour vous ?" : "Si vous suivez encore cette conséquence, qu’est-ce qu’elle impliquerait pour vous ?",
+          hint: "Continuez seulement si cette question vous paraît utile ; vous pouvez vous arrêter.",
+          type: "text", adaptive: true, personalized: true, fearProbe: true
+        });
+        lastId = nextId;
+      }
+      if (hasText(state.answers[lastId])) fearQuestions.push({
         id: "fearCore",
-        after: "fearImplication2",
+        after: lastId,
         label: "En regardant ce chemin, quel semble être l’enjeu le plus profond pour vous ?",
         type: "text", adaptive: true, personalized: true, fearProbe: true
       });
+      questions.push(...fearQuestions);
     }
   }
 
@@ -796,7 +813,7 @@ function buildConclusion(a) {
   const theme = conclusionTheme(a);
   const protection = firstMeaningful(a.protection);
   const protectionGoal = firstMeaningful(a.protectionPurpose) || (protection ? protectionMeaning(a.protection) : "");
-  const cost = firstMeaningful(a.protectionCost, a.heldBack, a.difficulty, a.implication);
+  const cost = firstMeaningful(a.protectionCost, a.heldBack);
   const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
   const value = firstMeaningful(a.value);
   const resource = firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering);
@@ -869,7 +886,7 @@ function buildConclusion(a) {
   const body = Array.isArray(a.body) ? a.body.filter(item => item !== "Je ne sais pas").slice(0, 2).join(" et ") : firstMeaningful(a.body);
   const trigger = firstMeaningful(a.triggers);
   const belief = firstMeaningful(a.belief);
-  const fearCore = firstMeaningful(a.fearCore, a.fearImplication2, a.fearImplication1);
+  const fearCore = firstMeaningful(a.fearCore, a.fearImplication4, a.fearImplication3, a.fearImplication2, a.fearImplication1);
   const narrative = [
     `${opening ? `Vous partez de « ${shortAnswer(opening, 155)} »` : "Vous avez décrit une situation qui compte pour vous"}${trigger ? `, qui semble notamment se réactiver lorsque « ${shortAnswer(trigger, 115)} »` : ""}. ${felt ? `Vous y associez « ${shortAnswer(felt, 105)} »` : "Vous avez pris le temps d’observer ce qui se présente"}${body ? `, avec un écho dans ${body.toLocaleLowerCase("fr")}` : ""}. Ces éléments rapprochent la situation, l’émotion et le corps sans prétendre expliquer automatiquement leur cause.`,
     `${protection ? `Quand cela arrive, vous dites : « ${shortAnswer(protection, 90)} »` : "Une manière de vous protéger apparaît dans vos réponses"}. ${protectionGoal ? `Il semble que cette réaction cherche à ${embeddedAnswer(protectionGoal, 125)}.` : ""}${cost ? ` En même temps, vous constatez ce coût : « ${shortAnswer(cost, 145)} ».` : ""}${belief ? ` La phrase intérieure « ${shortAnswer(belief, 105)} » pourrait contribuer à maintenir ce mouvement ; elle reste une hypothèse à vérifier, et non une vérité sur vous.` : ""}${fearCore ? ` En suivant le chemin de la peur, l’enjeu que vos mots font apparaître est « ${shortAnswer(fearCore, 130)} ».` : ""} ${tensionReading(a)}`.trim(),
