@@ -43,6 +43,58 @@ const STEPS=[
  ]}
 ];
 
+/*
+ * Les relances sont issues des logiques SPIRE, 5S, méta-modèle et croyances.
+ * Deux relances maximum par mouvement : on approfondit sans transformer le
+ * parcours en interrogatoire.
+ */
+const DEEPENERS={
+  0:[
+    {id:"personalImpact",after:"difficulty",label:"Qu’est-ce que cette difficulté vient toucher chez vous, au-delà de la situation elle-même ?",when:a=>hasText(a.difficulty)},
+    {id:"implication",after:"personalImpact",label:"Si rien ne change, qu’est-ce que vous craignez que cela entraîne pour vous ?",when:a=>hasText(a.personalImpact)}
+  ],
+  1:[
+    {id:"emotionMessage",after:"emotionWords",label:"Si ce ressenti pouvait parler, qu’essaierait-il de vous faire entendre ?",when:a=>hasText(a.emotionWords)||hasAny(a.emotions)},
+    {id:"heldBack",after:"emotionMessage",label:"Dans cette situation, qu’est-ce que vous retenez, n’osez pas dire ou ne vous autorisez pas à faire ?",when:a=>hasText(a.emotionMessage)},
+    {id:"needObstacle",after:"immediateNeed",label:"Qu’est-ce qui vous empêche aujourd’hui d’accueillir pleinement ce besoin ?",when:a=>hasText(a.immediateNeed)}
+  ],
+  2:[
+    {id:"commonThread",after:"recurrence",label:"Qu’est-ce qui semble commun aux différentes fois où cela se produit ?",when:a=>includesAny(a.recurrence,["Cela revient parfois","Cela revient souvent"])},
+    {id:"protectionPurpose",after:"protection",label:"À quoi ce fonctionnement essaie-t-il de vous protéger ?",when:a=>hasAny(a.protection)},
+    {id:"protectionCost",after:"protectionPurpose",label:"Et aujourd’hui, qu’est-ce que cette protection vous coûte ou vous empêche de vivre ?",when:a=>hasText(a.protectionPurpose)}
+  ],
+  3:[
+    {id:"ruleFear",after:"belief",label:"Que craignez-vous qu’il arrive si vous ne respectez plus cette règle intérieure ?",when:a=>containsRule(a.belief)},
+    {id:"exception",after:"belief",label:"Pouvez-vous retrouver une exception, même petite, où cela ne s’est pas passé ainsi ?",when:a=>containsAbsolute(a.belief)},
+    {id:"beliefOrigin",after:"belief",label:"Cette phrase vous appartient-elle vraiment, ou semble-t-elle venir de quelque part ?",when:a=>hasText(a.belief)},
+    {id:"deepNeed",after:"need",label:"Si ce besoin était vraiment entendu, qu’est-ce que cela changerait dans votre manière d’être ou d’agir ?",when:a=>hasText(a.need)}
+  ],
+  4:[
+    {id:"hiddenStrength",after:"quality",label:"Dans quelle situation cette qualité vous a-t-elle déjà réellement aidé ?",when:a=>hasText(a.quality)},
+    {id:"choiceBarrier",after:"newChoice",label:"Qu’est-ce qui pourrait vous ramener vers l’ancien fonctionnement ?",when:a=>hasText(a.newChoice)},
+    {id:"choiceResource",after:"choiceBarrier",label:"Sur quelle ressource en vous pourrez-vous alors vous appuyer ?",when:a=>hasText(a.choiceBarrier)}
+  ],
+  5:[
+    {id:"actionSmall",after:"action",label:"Comment rendre cette action assez petite et simple pour qu’elle soit réellement faisable ?",when:a=>hasText(a.action)},
+    {id:"actionWhen",after:"actionSmall",label:"Quand précisément souhaitez-vous faire ce premier pas ?",when:a=>hasText(a.actionSmall)},
+    {id:"support",after:"afterNeed",label:"De quel soutien ou de quelle ressource disposez-vous déjà pour la suite ?",when:a=>hasText(a.afterNeed)}
+  ]
+};
+
+function textValue(v){return Array.isArray(v)?v.join(" "):String(v??"")}
+function hasText(v){return textValue(v).trim().length>=3}
+function hasAny(v){return Array.isArray(v)?v.length>0:hasText(v)}
+function includesAny(v,values){return (Array.isArray(v)?v:[v]).some(x=>values.includes(x))}
+function normalized(v){return textValue(v).toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g,"")}
+function containsRule(v){return /\b(il faut|je dois|je ne dois|oblige|obligation|pas le droit)\b/.test(normalized(v))}
+function containsAbsolute(v){return /\b(toujours|jamais|tout le monde|personne|aucun|rien|impossible)\b/.test(normalized(v))}
+function activeQuestions(stepIndex){
+ const base=STEPS[stepIndex].questions,eligible=(DEEPENERS[stepIndex]||[]).filter(q=>q.when(state.answers)).slice(0,2).map(q=>({...q,type:"text",adaptive:true})),result=[];
+ const addAfter=id=>eligible.filter(x=>x.after===id&&!result.some(r=>r.id===x.id)).forEach(x=>{result.push(x);addAfter(x.id)});
+ base.forEach(q=>{result.push(q);addAfter(q.id)});
+ return result;
+}
+
 const GUIDANCE=[
  "Prenez un instant pour choisir une situation précise. Il n’est pas nécessaire de tout raconter : quelques mots sincères suffisent.",
  "Il n’y a pas de bonne réponse. Remarquez simplement ce qui est présent, même si c’est flou ou si vous ne ressentez rien de particulier.",
@@ -76,9 +128,9 @@ function show(view){[welcome,session,summary].forEach(x=>x.hidden=true);view.hid
 function escapeHtml(v=""){return String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 
 function renderNav(){const nav=$("#stepNav");nav.innerHTML=STEPS.map((s,i)=>`<button type="button" data-step="${i}" class="${i===state.step?'active':''} ${i<state.step?'done':''}"><span>${i<state.step?'✓':i+1}</span>${escapeHtml(s.title)}</button>`).join("");nav.querySelectorAll("button").forEach(b=>b.onclick=()=>{collect();state.step=+b.dataset.step;renderStep()})}
-function question(q){const val=state.answers[q.id]??(q.type==="scale"?5:q.type==="chips"?[]:"");if(q.type==="chips")return `<article class="question-card"><div class="question-title">${q.label}</div>${q.hint?`<p class="question-hint">${q.hint}</p>`:""}<div class="chips" data-id="${q.id}">${q.options.map(o=>`<button type="button" class="chip ${val.includes(o)?'selected':''}" data-value="${escapeHtml(o)}">${escapeHtml(o)}</button>`).join("")}</div></article>`;
- if(q.type==="scale")return `<article class="question-card"><label for="${q.id}">${q.label}</label><div class="scale-wrap"><input id="${q.id}" data-id="${q.id}" type="range" min="0" max="10" value="${val}"><output class="scale-value" for="${q.id}">${val}</output></div><p class="question-hint">0 — très faible &nbsp;&nbsp; 10 — très forte</p></article>`;
- return `<article class="question-card"><label for="${q.id}">${q.label}</label>${q.hint?`<p class="question-hint">${q.hint}</p>`:""}<textarea id="${q.id}" data-id="${q.id}" placeholder="Noter les mots qui viennent…">${escapeHtml(val)}</textarea></article>`}
+function question(q){const val=state.answers[q.id]??(q.type==="scale"?5:q.type==="chips"?[]:"");const cls=q.adaptive?' adaptive-question':'';const badge=q.adaptive?'<p class="adaptive-label">Une relance pour approfondir</p>':'';if(q.type==="chips")return `<article class="question-card${cls}">${badge}<div class="question-title">${q.label}</div>${q.hint?`<p class="question-hint">${q.hint}</p>`:""}<div class="chips" data-id="${q.id}">${q.options.map(o=>`<button type="button" class="chip ${val.includes(o)?'selected':''}" data-value="${escapeHtml(o)}">${escapeHtml(o)}</button>`).join("")}</div></article>`;
+ if(q.type==="scale")return `<article class="question-card${cls}">${badge}<label for="${q.id}">${q.label}</label><div class="scale-wrap"><input id="${q.id}" data-id="${q.id}" type="range" min="0" max="10" value="${val}"><output class="scale-value" for="${q.id}">${val}</output></div><p class="question-hint">0 — très faible &nbsp;&nbsp; 10 — très forte</p></article>`;
+ return `<article class="question-card${cls}">${badge}<label for="${q.id}">${q.label}</label>${q.hint?`<p class="question-hint">${q.hint}</p>`:""}<textarea id="${q.id}" data-id="${q.id}" placeholder="Noter les mots qui viennent…">${escapeHtml(val)}</textarea></article>`}
 function resourceSuggestion(){const themes=state.answers.themes||[];const paths=themes.filter(x=>RESOURCE_PATHS[x]).map(x=>`<strong>${escapeHtml(x)}</strong> : ${RESOURCE_PATHS[x]}`);if(!paths.length)return "";return `<div class="suggestion-box"><small>Pistes à ressentir, pas conclusions</small><p>${paths.join("<br><br>")}</p></div>`}
 function renderStep(){renderNav();const s=STEPS[state.step];$("#stepNumber").textContent=`Étape ${state.step+1} sur ${STEPS.length}`;$("#progressBar").style.width=`${((state.step+1)/STEPS.length)*100}%`;const pause=state.step===2?`<div class="pause-box"><span>♡</span><div><b>Vous restez libre.</b><br>Si un souvenir ou une émotion devient trop intense, faites une pause et revenez à ce qui vous entoure ici et maintenant.</div></div>`:"";stepContent.innerHTML=`<p class="eyebrow">${String(state.step+1).padStart(2,"0")}</p><h2>${s.title}</h2><p class="step-intro">${s.intro}</p><div class="guidance">${GUIDANCE[state.step]}</div>${pause}${state.step===4?resourceSuggestion():""}${s.questions.map(question).join("")}`;
  stepContent.querySelectorAll("textarea").forEach(el=>el.addEventListener("input",()=>{state.answers[el.dataset.id]=el.value;save()}));
@@ -87,7 +139,7 @@ function renderStep(){renderNav();const s=STEPS[state.step];$("#stepNumber").tex
  $("#previousBtn").style.visibility=state.step===0?"hidden":"visible";$("#nextBtn").innerHTML=state.step===STEPS.length-1?'Voir la synthèse <span>→</span>':'Continuer <span>→</span>'}
 function collect(){state.name=$("#sessionName").value;save()}
 function start(fresh=false){if(fresh){state={step:0,name:"",answers:{},updatedAt:null};save()}$("#sessionName").value=state.name||"";show(session);renderStep()}
-function renderSummary(){collect();const a=state.answers;const themes=Array.isArray(a.themes)?a.themes.join(" · "):a.themes;const source=a.coreWord||themes||"À préciser";const passage=a.opposite||a.need||"À faire émerger";const treasure=a.quality||a.sensitivity||"À reconnaître";$("#transformationCard").innerHTML=`<h2>Le fil essentiel de la séance</h2><div class="transformation-flow"><div class="transformation-node"><small>Ce qui pèse</small><strong>${escapeHtml(source)}</strong></div><div class="flow-arrow">→</div><div class="transformation-node"><small>Ce qui est recherché</small><strong>${escapeHtml(passage)}</strong></div><div class="flow-arrow">→</div><div class="transformation-node"><small>La ressource</small><strong>${escapeHtml(treasure)}</strong></div></div><div class="insight">Cette carte est une piste formulée à partir des mots notés pendant la séance. Elle n’est juste que si elle résonne pour la personne. ${a.action?`Premier mouvement choisi : <strong>${escapeHtml(a.action)}</strong>`:""}</div>`;$("#summaryContent").innerHTML=STEPS.map(s=>`<article class="summary-card"><h3>${s.title}</h3>${s.questions.map(q=>{let v=a[q.id];if(Array.isArray(v))v=v.join(" · ");const empty=v===undefined||v==="";return `<div class="summary-item"><b>${q.label}</b><p class="${empty?'empty-answer':''}">${empty?'Non renseigné':escapeHtml(v)+(q.type==='scale'?' / 10':'')}</p></div>`}).join("")}</article>`).join("");show(summary)}
+function renderSummary(){collect();const a=state.answers;const themes=Array.isArray(a.themes)?a.themes.join(" · "):a.themes;const source=a.coreWord||themes||"À préciser";const passage=a.opposite||a.need||"À faire émerger";const treasure=a.quality||a.sensitivity||"À reconnaître";$("#transformationCard").innerHTML=`<h2>Le fil essentiel de la séance</h2><div class="transformation-flow"><div class="transformation-node"><small>Ce qui pèse</small><strong>${escapeHtml(source)}</strong></div><div class="flow-arrow">→</div><div class="transformation-node"><small>Ce qui est recherché</small><strong>${escapeHtml(passage)}</strong></div><div class="flow-arrow">→</div><div class="transformation-node"><small>La ressource</small><strong>${escapeHtml(treasure)}</strong></div></div><div class="insight">Cette carte est une piste formulée à partir des mots notés pendant la séance. Elle n’est juste que si elle résonne pour la personne. ${a.action?`Premier mouvement choisi : <strong>${escapeHtml(a.action)}</strong>`:""}</div>`;$("#summaryContent").innerHTML=STEPS.map((s,i)=>`<article class="summary-card"><h3>${s.title}</h3>${activeQuestions(i).map(q=>{let v=a[q.id];if(Array.isArray(v))v=v.join(" · ");const empty=v===undefined||v==="";return `<div class="summary-item ${q.adaptive?'summary-adaptive':''}"><b>${q.label}</b><p class="${empty?'empty-answer':''}">${empty?'Non renseigné':escapeHtml(v)+(q.type==='scale'?' / 10':'')}</p></div>`}).join("")}</article>`).join("");show(summary)}
 
 $("#newSession").onclick=()=>{if(localStorage.getItem(KEY)&&Object.keys(state.answers).length&&!confirm("Commencer un nouveau parcours effacera vos réponses actuelles. Continuer ?"))return;start(true)};
 $("#resumeSession").onclick=()=>start(false);$("#previousBtn").onclick=()=>{collect();if(state.step>0){state.step--;renderStep()}};$("#nextBtn").onclick=()=>{collect();if(state.step<STEPS.length-1){state.step++;renderStep();window.scrollTo({top:0,behavior:"smooth"})}else renderSummary()};
@@ -111,6 +163,20 @@ function guideReaction(q){
  if(q.id==="recurrence"&&v!=="Situation isolée")return "Le fait que cela revienne peut signaler un fonctionnement de protection devenu familier. Observons-le sans chercher de coupable.";
  if(q.id==="protection")return `Cette réaction — <strong>${escapeHtml(v)}</strong> — a probablement essayé de vous protéger. Voyons maintenant si elle vous convient encore.`;
  if(q.id==="belief")return "Cette phrase intérieure n’est pas une vérité sur vous. Elle peut être une ancienne conclusion que vous pouvez regarder avec plus de recul.";
+ if(q.id==="personalImpact")return "Vous distinguez maintenant la situation extérieure de ce qu’elle vient toucher plus profondément en vous.";
+ if(q.id==="implication")return "Cette crainte montre pourquoi la situation prend autant de place. La nommer permet de ne plus la laisser agir entièrement dans l’ombre.";
+ if(q.id==="emotionMessage")return "Vous venez d’écouter le message possible de ce ressenti, sans lui demander de disparaître.";
+ if(q.id==="heldBack")return "Ce que vous retenez peut indiquer une limite, une parole ou un choix qui cherche à retrouver sa place.";
+ if(q.id==="commonThread")return "Ce fil commun est une piste : il aide à observer le fonctionnement sans réduire toutes les situations à une seule cause.";
+ if(q.id==="protectionPurpose")return "Reconnaître l’intention protectrice ne vous oblige pas à conserver ce fonctionnement tel quel.";
+ if(q.id==="ruleFear")return "Derrière une règle intérieure se trouve souvent une conséquence redoutée. Vous venez de la rendre plus visible.";
+ if(q.id==="exception")return "Cette exception rappelle que la phrase intérieure n’est ni totale ni définitive.";
+ if(q.id==="beliefOrigin")return "Distinguer ce qui vous appartient de ce qui a été reçu ouvre déjà une possibilité de choix.";
+ if(q.id==="deepNeed")return "Vous ne nommez plus seulement un manque : vous entrevoyez ce que ce besoin pourrait rendre possible.";
+ if(q.id==="choiceBarrier")return "Prévoir ce qui pourrait vous ramener en arrière n’annule pas votre choix : cela permet de mieux le soutenir.";
+ if(q.id==="choiceResource")return "Cette ressource constitue un appui concret auquel vous pourrez revenir.";
+ if(q.id==="actionSmall")return "Une action suffisamment petite a davantage de chances de devenir réelle et durable.";
+ if(q.id==="actionWhen")return "Vous venez de donner un repère concret à votre décision.";
  if(q.id==="themes")return resourceSuggestion()||"Gardez ces thèmes comme des hypothèses, uniquement s’ils résonnent pour vous.";
  if(["quality","sensitivity","offering"].includes(q.id))return "Vous ne niez pas ce qui a été difficile : vous commencez aussi à reconnaître ce qui s’est développé en vous.";
  if(q.id==="action")return `Votre premier mouvement est concret : <strong>${escapeHtml(v)}</strong>. Plus il est simple, plus il peut devenir un vrai ancrage.`;
@@ -130,14 +196,14 @@ function bindCurrent(q){
 renderStep=function(){
  state.question=Number.isInteger(state.question)?state.question:0;
  state.feedback=Boolean(state.feedback);
- renderNav();const s=STEPS[state.step],q=s.questions[state.question];
- const total=STEPS.reduce((n,x)=>n+x.questions.length,0),done=STEPS.slice(0,state.step).reduce((n,x)=>n+x.questions.length,0)+state.question+1;
- $("#stepNumber").textContent=`${s.title} · question ${state.question+1}/${s.questions.length}`;$("#progressBar").style.width=`${done/total*100}%`;
+ renderNav();const s=STEPS[state.step],questions=activeQuestions(state.step);if(state.question>=questions.length)state.question=questions.length-1;const q=questions[state.question];
+ const allSteps=STEPS.map((_,i)=>activeQuestions(i)),total=allSteps.reduce((n,x)=>n+x.length,0),done=allSteps.slice(0,state.step).reduce((n,x)=>n+x.length,0)+state.question+1;
+ $("#stepNumber").textContent=`${s.title} · question ${state.question+1}/${questions.length}`;$("#progressBar").style.width=`${done/total*100}%`;
  const intro=state.question===0?`<p class="eyebrow">${String(state.step+1).padStart(2,"0")}</p><h2>${s.title}</h2><p class="step-intro">${s.intro}</p><div class="guidance">${GUIDANCE[state.step]}</div>`:"";
  const pause=state.step===2&&state.question===0?`<div class="pause-box"><span>♡</span><div><b>Vous restez libre.</b><br>Si un souvenir devient trop intense, faites une pause et revenez à ce qui vous entoure.</div></div>`:"";
- stepContent.innerHTML=`<div class="conversation">${intro}${pause}<div class="guide-bubble ${state.feedback?"feedback":""}"><span class="guide-name">Votre guide ÉCLAT</span><p>${state.feedback?guideReaction(q):"Prenez votre temps. Répondez avec les mots qui vous ressemblent."}</p></div>${state.feedback?"":`<div class="single-question"><p class="question-counter">Une seule question à la fois</p>${question(q)}<p class="skip-note">Vous pouvez continuer sans répondre.</p></div>`}</div>`;
+ stepContent.innerHTML=`<div class="conversation">${intro}${pause}<div class="guide-bubble ${state.feedback?"feedback":""}"><span class="guide-name">Votre guide ÉCLAT</span><p>${state.feedback?guideReaction(q):q.adaptive?"Votre réponse ouvre une piste qui mérite d’être précisée.":"Prenez votre temps. Répondez avec les mots qui vous ressemblent."}</p></div>${state.feedback?"":`<div class="single-question"><p class="question-counter">${q.adaptive?"Le parcours s’adapte à votre réponse":"Une seule question à la fois"}</p>${question(q)}<p class="skip-note">Vous pouvez continuer sans répondre.</p></div>`}</div>`;
  if(!state.feedback)bindCurrent(q);$("#previousBtn").style.visibility=state.step===0&&state.question===0?"hidden":"visible";$("#nextBtn").innerHTML=state.feedback?'Continuer <span>→</span>':'Confier ma réponse <span>→</span>'
 };
 
-$("#previousBtn").onclick=()=>{collect();if(state.feedback)state.feedback=false;else if(state.question>0)state.question--;else if(state.step>0){state.step--;state.question=STEPS[state.step].questions.length-1}save();renderStep()};
-$("#nextBtn").onclick=()=>{collect();if(!state.feedback){state.feedback=true;save();renderStep();return}state.feedback=false;if(state.question<STEPS[state.step].questions.length-1)state.question++;else if(state.step<STEPS.length-1){state.step++;state.question=0}else{renderSummary();return}save();renderStep();window.scrollTo({top:0,behavior:"smooth"})};
+$("#previousBtn").onclick=()=>{collect();if(state.feedback)state.feedback=false;else if(state.question>0)state.question--;else if(state.step>0){state.step--;state.question=activeQuestions(state.step).length-1}save();renderStep()};
+$("#nextBtn").onclick=()=>{collect();if(!state.feedback){state.feedback=true;save();renderStep();return}state.feedback=false;const questions=activeQuestions(state.step);if(state.question<questions.length-1)state.question++;else if(state.step<STEPS.length-1){state.step++;state.question=0}else{renderSummary();return}save();renderStep();window.scrollTo({top:0,behavior:"smooth"})};
