@@ -3,6 +3,7 @@ import { cp, mkdir, rm } from "node:fs/promises";
 const outputDirectory = new URL("./dist/", import.meta.url);
 const files = [
   "index.html",
+  "connexion.html",
   "app.js",
   "styles.css",
   "favicon.svg",
