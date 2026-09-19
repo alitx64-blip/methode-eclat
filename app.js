@@ -232,6 +232,21 @@ function detectedSignals(a = state.answers) {
   })).filter(signal => signal.score > 0).sort((a, b) => b.score - a.score || a.order - b.order);
 }
 
+function supportedSignals(a = state.answers) {
+  const fields = [a.reason, a.difficulty, a.intention, a.emotionWords, a.triggers, a.belief, a.need, a.value]
+    .filter(value => typeof value === "string" && value.trim());
+  return detectedSignals(a).filter(signal => {
+    const matchingFields = fields.filter(value => {
+      const field = normalized(value);
+      return signal.words.some(word => {
+        const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}${word.includes(" ") ? "" : "\\p{L}*"}(?=$|[^\\p{L}\\p{N}])`, "u").test(field);
+      });
+    }).length;
+    return matchingFields >= 2;
+  });
+}
+
 function leadingSignal(a = state.answers) {
   return detectedSignals(a)[0] || null;
 }
@@ -473,6 +488,28 @@ function personalizedDeepeners(stepIndex) {
         type: "text", adaptive: true, personalized: true, partsProbe: true
       });
     }
+    const connection = connectionRestitution(state.answers);
+    if (connection && !includesAny(state.answers.connectionResonance, ["Non, pas vraiment"])) {
+      questions.push({
+        id: "connectionResonance",
+        after: hasText(state.answers.value) ? "value" : "need",
+        label: `${connection} Est-ce que ce rapprochement vous parle ?`,
+        type: "chips",
+        options: ["Oui, ça me parle", "En partie", "Non, pas vraiment"],
+        adaptive: true,
+        personalized: true,
+        connectionProbe: true
+      });
+      if (includesAny(state.answers.connectionResonance, ["En partie"])) questions.push({
+        id: "connectionNuance",
+        after: "connectionResonance",
+        label: "Qu’est-ce qui correspond à votre vécu dans ce rapprochement, et qu’est-ce qui ne correspond pas ?",
+        type: "text",
+        adaptive: true,
+        personalized: true,
+        connectionProbe: true
+      });
+    }
   }
 
   if (stepIndex === 2 && hasText(state.answers.irritation)) {
@@ -499,7 +536,7 @@ function personalizedDeepeners(stepIndex) {
   }
 
   if (stepIndex === 1 && questions.some(q => q.fearProbe)) return questions.filter(q => q.emotionProbe || q.fearProbe || q.bodyProbe);
-  if (stepIndex === 3 && questions.some(q => q.partsProbe)) return questions.filter(q => q.partsProbe);
+  if (stepIndex === 3 && questions.some(q => q.partsProbe)) return questions.filter(q => q.partsProbe || q.connectionProbe);
   return questions.slice(0, 2);
 }
 
@@ -605,6 +642,7 @@ function freshState() {
     question: 0,
     currentQuestionId: null,
     feedbackQuestionId: null,
+    clarificationQuestionId: null,
     feedback: false,
     adaptiveQuestionBank: {},
     progressMax: 0,
@@ -779,7 +817,7 @@ function question(q) {
     return `
       <article class="question-card${cls}">
         ${badge}
-        <div class="question-title">${q.label}</div>
+        <div class="question-title">${escapeHtml(q.label)}</div>
         ${q.hint ? `<p class="question-hint">${q.hint}</p>` : ""}
         <div class="chips" data-id="${q.id}">
           ${q.options.map(o => `
@@ -793,7 +831,7 @@ function question(q) {
     return `
       <article class="question-card${cls}">
         ${badge}
-        <label for="${q.id}">${q.label}</label>
+        <label for="${q.id}">${escapeHtml(q.label)}</label>
         <div class="scale-wrap">
           <input id="${q.id}" data-id="${q.id}" type="range" min="0" max="10" value="${val}">
           <output class="scale-value" for="${q.id}">${val}</output>
@@ -805,7 +843,7 @@ function question(q) {
   return `
     <article class="question-card${cls}">
       ${badge}
-      <label for="${q.id}">${q.label}</label>
+      <label for="${q.id}">${escapeHtml(q.label)}</label>
       ${q.hint ? `<p class="question-hint">${q.hint}</p>` : ""}
       <textarea id="${q.id}" data-id="${q.id}" placeholder="Noter les mots qui viennent…">${escapeHtml(val)}</textarea>
     </article>`;
@@ -834,10 +872,19 @@ function isVagueAnswer(value) {
   return !clean || /^(je ne sais pas|je sais pas|jsp|aucune idee|pas d idee|rien|aucun|aucune|neant|bof|oui|non|peut etre|autre)$/.test(clean);
 }
 
+function isIncompleteAnswer(value) {
+  const clean = normalized(value).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  if (!clean || isVagueAnswer(value)) return false;
+  const words = clean.split(" ");
+  if (/\b(quand|lorsque|parce que|puisque|mais|et|donc|avec|sans|pour|chez|dont|qui|que|de|du|des|a|au|aux)$/.test(clean)) return true;
+  if (words.length <= 5 && /^(quand|lorsque|parce que)\b/.test(clean) && !/\b(je|j |ca|cela|il|elle|on)\s+(ressens|pense|veux|peux|dois|suis|ai|est|fait|arrive|commence|augmente|diminue|bloque|change)\b/.test(clean)) return true;
+  return /^(quand|lorsque) on a (decouvert|appris|vu|compris)$/.test(clean);
+}
+
 function firstMeaningful(...values) {
   return values
     .map(value => textValue(value).replace(/\s+/g, " ").trim())
-    .find(value => value.length >= 3 && !isVagueAnswer(value)) || "";
+    .find(value => value.length >= 3 && !isVagueAnswer(value) && !isIncompleteAnswer(value)) || "";
 }
 
 function embeddedAnswer(value, max = 150) {
@@ -855,7 +902,7 @@ function conclusionTheme(a) {
     [["Impuissance"], "le pouvoir d’agir"]
   ];
   const selected = priorities.find(([labels]) => labels.some(label => themes.includes(label)));
-  return selected?.[1] || leadingSignal(a)?.name || firstMeaningful(a.coreWord) || "votre situation actuelle";
+  return selected?.[1] || supportedSignals(a)[0]?.name || firstMeaningful(a.coreWord) || "";
 }
 
 function protectionMeaning(value) {
@@ -952,10 +999,76 @@ function tensionReading(a) {
   return text;
 }
 
+function connectionCandidates(a) {
+  const opening = firstMeaningful(a.reason, a.difficulty);
+  const intention = firstMeaningful(a.resultMeaning, a.positiveOutcome, a.intention);
+  const emotion = firstMeaningful(a.emotionWords, a.emotions);
+  const body = firstMeaningful(a.bodySignal, a.body);
+  const trigger = firstMeaningful(a.triggers);
+  const fear = firstMeaningful(a.fearCore, a.fearImplication2, a.fearImplication1, a.fearScenario);
+  const protection = firstMeaningful(a.protection);
+  const purpose = firstMeaningful(a.protectionPurpose);
+  const cost = firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a));
+  const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed);
+  const value = firstMeaningful(a.value);
+  const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
+  const action = firstMeaningful(a.actionSmall, a.action);
+  const repetition = firstMeaningful(a.commonThread);
+  const candidates = [];
+  const add = (id, score, facts, reading, hypothesis = false) => {
+    if (facts.every(Boolean)) candidates.push({ id, score, facts, reading, hypothesis });
+  };
+
+  add("emotionTrigger", 5, [emotion, trigger], `Vous associez « ${shortAnswer(emotion, 100)} » au moment où « ${shortAnswer(trigger, 125)} ».`);
+  add("bodyEmotion", 2, [emotion, body], `L’émotion « ${shortAnswer(emotion, 90)} » apparaît avec cet écho corporel : « ${shortAnswer(body, 100)} ».`);
+  add("fearSituation", 3, [opening, fear], `La situation de départ et la peur se rejoignent autour de cet enjeu formulé par vous : « ${shortAnswer(fear, 125)} ».`);
+  add("protectionFear", 3, [protection, fear], `Quand cet enjeu apparaît, vous décrivez cette réaction : « ${shortAnswer(protection, 90)} ».`);
+  add("protectionPurpose", 5, [protection, purpose], `Vous reliez vous-même « ${shortAnswer(protection, 80)} » à cette fonction : « ${shortAnswer(purpose, 125)} ».`);
+  add("protectionCost", 6, [protection, cost], `Vous observez aussi que « ${shortAnswer(protection, 80)} » a cette conséquence : « ${shortAnswer(cost, 135)} ».`);
+  add("needProtection", 3, [protection, need], `Votre façon de vous protéger et votre besoin de « ${shortAnswer(need, 100)} » semblent se présenter dans la même situation.`, true);
+  add("valueNeed", 3, [need, value], `Le besoin « ${shortAnswer(need, 90)} » rejoint la valeur « ${shortAnswer(value, 90)} » que vous souhaitez préserver.`);
+  add("choiceValue", 3, [value, choice], `Le choix « ${shortAnswer(choice, 105)} » peut être rapproché de la valeur « ${shortAnswer(value, 80)} » que vous avez nommée.`);
+  add("actionChoice", 4, [choice, action], `Votre action « ${shortAnswer(action, 110)} » donne une forme concrète au choix « ${shortAnswer(choice, 105)} ».`);
+  add("repetitionTrigger", 3, [repetition, trigger], `Le déclencheur « ${shortAnswer(trigger, 105)} » rejoint ce point commun que vous avez repéré : « ${shortAnswer(repetition, 115)} ».`);
+
+  const conflict = partsConflict(a);
+  if (conflict) add("internalTension", 7, [conflict.first, conflict.second], `Une piste pourrait être qu’une partie de vous cherche ${conflict.first}, tandis qu’une autre cherche ${conflict.second}.`, true);
+
+  const freedomText = normalized([a.intention, a.resultMeaning, a.positiveOutcome, a.need, a.value, a.opposite, a.newChoice].filter(Boolean).join(" "));
+  const financeText = normalized([a.reason, a.difficulty, a.triggers, a.fearScenario, a.fearImplication1, a.fearImplication2].filter(Boolean).join(" "));
+  const freedom = /\b(liberte|libre|autonomie|independance|avancer|changer)\b/.test(freedomText);
+  const financialPressure = /\b(compte\w*|bancaire\w*|fin de mois|argent|revenu|salaire|credit|charges|financ\w*|vide\w*)\b/.test(financeText);
+  if (freedom && financialPressure && emotion) {
+    add("freedomSecurity", 8, [intention || need || value, trigger || opening, emotion], `Plusieurs de vos réponses semblent se rejoindre entre votre élan vers « ${shortAnswer(intention || need || value, 90)} » et « ${shortAnswer(emotion, 90)} » qui apparaît dans ce contexte financier. Une piste pourrait être qu’avancer demande à la fois davantage de liberté et suffisamment de sécurité.`, true);
+  }
+
+  return candidates.sort((left, right) => right.score - left.score);
+}
+
+function strongConnections(a) {
+  const rejected = includesAny(a.connectionResonance, ["Non, pas vraiment"]);
+  const candidates = connectionCandidates(a);
+  const withoutDuplicateTension = candidates.some(connection => connection.id === "freedomSecurity")
+    ? candidates.filter(connection => connection.id !== "internalTension")
+    : candidates;
+  if (rejected) return withoutDuplicateTension.filter(connection => !connection.hypothesis).slice(0, 3);
+  const interpretive = withoutDuplicateTension.filter(connection => connection.score >= 4 && connection.id !== "actionChoice");
+  return interpretive.length ? [...interpretive, ...withoutDuplicateTension.filter(connection => connection.id === "actionChoice")].slice(0, 3) : [];
+}
+
+function connectionRestitution(a) {
+  const candidates = connectionCandidates(a);
+  const connections = (candidates.some(connection => connection.id === "freedomSecurity")
+    ? candidates.filter(connection => connection.id !== "internalTension")
+    : candidates).filter(connection => connection.score >= 5).slice(0, 2);
+  if (connections.length < 2) return "";
+  return `Plusieurs de vos réponses semblent se répondre. ${connections.map(connection => connection.reading).join(" ")} Une piste à vérifier ensemble se dessine, sans en faire une vérité sur vous.`;
+}
+
 function buildConclusion(a) {
   const theme = conclusionTheme(a);
   const protection = firstMeaningful(a.protection);
-  const protectionGoal = firstMeaningful(a.protectionPurpose) || (protection ? protectionMeaning(a.protection) : "");
+  const protectionGoal = firstMeaningful(a.protectionPurpose);
   const cost = firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a));
   const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
   const value = firstMeaningful(a.value);
@@ -963,6 +1076,8 @@ function buildConclusion(a) {
   const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
   const action = firstMeaningful(a.actionSmall, a.action);
   const opening = firstMeaningful(a.reason, a.difficulty);
+  const intention = firstMeaningful(a.resultMeaning, a.positiveOutcome, a.intention);
+  const connections = strongConnections(a);
   const evidence = [opening, protection || protectionGoal, cost, firstMeaningful(a.belief), need || value, resource, choice || action].filter(Boolean);
   const insufficient = evidence.length < 4;
 
@@ -995,11 +1110,11 @@ function buildConclusion(a) {
   }
 
   const observation = opening
-    ? `Vous êtes arrivé avec une situation formulée ainsi : « ${shortAnswer(opening, 160)} ». Dans l’ensemble de vos réponses, le fil qui ressort le plus concerne ${theme}.`
-    : `Dans l’ensemble de vos réponses, le fil qui ressort le plus concerne ${theme}.`;
+    ? `Vous êtes arrivé avec une situation formulée ainsi : « ${shortAnswer(opening, 160)} ».${intention ? ` Vous avez aussi nommé cette direction : « ${shortAnswer(intention, 125)} ».` : ""}`
+    : "Vous avez pris le temps de préciser ce que vous vivez actuellement.";
 
   const mechanism = protection
-    ? `Face à ce qui vous touche, vous dites réagir ainsi : « ${shortAnswer(protection, 90)} ». ${protectionGoal ? `Ce fonctionnement semble chercher à ${embeddedAnswer(protectionGoal, 130)}. ` : ""}Il ne dit pas qui vous êtes : il décrit une stratégie devenue familière.`
+    ? `Face à ce qui vous touche, vous dites réagir ainsi : « ${shortAnswer(protection, 90)} ». ${protectionGoal ? `Vous lui associez cette fonction : « ${shortAnswer(protectionGoal, 130)} ». ` : ""}Cela décrit votre réponse dans cette situation, pas une vérité générale sur vous.`
     : protectionGoal ? `Vous indiquez que votre réaction cherche à ${embeddedAnswer(protectionGoal, 130)}. Cette fonction protectrice mérite d’être vérifiée à partir de situations concrètes.` : "";
 
   const implication = cost
@@ -1012,11 +1127,12 @@ function buildConclusion(a) {
       ? `Ce qui semble chercher à reprendre sa place n’est pas seulement la disparition du problème, mais votre besoin de ${embeddedAnswer(need)}. L’entendre peut vous aider à choisir autrement sans rejeter la partie de vous qui a voulu vous protéger.`
       : "";
 
-  const awareness = need
-    ? `Votre point de conscience : vous n’avez peut-être pas seulement besoin de changer la situation ; vous avez besoin de reconnaître et d’honorer ${embeddedAnswer(need)}${value ? `, en restant fidèle à votre valeur de ${embeddedAnswer(value)}` : ""}.`
-    : value
-      ? `Votre point de conscience : votre prochain choix peut être évalué à partir de cette valeur que vous avez nommée — ${shortAnswer(value)}.`
-    : `Votre point de conscience : le changement ne consiste pas à supprimer une partie de vous, mais à comprendre ce qu’elle protège afin de retrouver davantage de choix.`;
+  const strongestHypothesis = connections.find(connection => connection.hypothesis);
+  const awareness = strongestHypothesis
+    ? `${strongestHypothesis.reading} Si cela résonne pour vous, ce rapprochement peut devenir un repère ; vous seule pouvez voir s’il correspond réellement à ce que vous vivez.`
+    : need
+      ? `Vos réponses font apparaître ce besoin comme un repère : « ${shortAnswer(need, 120)} »${value ? `, en lien avec la valeur « ${shortAnswer(value, 90)} »` : ""}.`
+      : `Aucune interprétation supplémentaire n’est nécessaire : vos réponses permettent déjà de mieux situer ce qui se passe et le prochain mouvement possible.`;
 
   const point = choice
     ? `Je peux reconnaître ce qui m’a protégé, sans le laisser décider à ma place, et avancer vers ce choix : « ${shortAnswer(choice)} ».`
@@ -1024,17 +1140,26 @@ function buildConclusion(a) {
       ? `Je peux reconnaître ce qui m’a protégé et m’appuyer maintenant sur ${embeddedAnswer(resource)}.`
       : `Je peux accueillir ce que je comprends aujourd’hui et choisir un premier mouvement plus juste pour moi.`;
 
-  const emotions = Array.isArray(a.emotions) ? a.emotions.filter(item => item !== "Autre").slice(0, 2).join(" et ") : "";
-  const felt = firstMeaningful(a.emotionWords) || emotions;
-  const body = Array.isArray(a.body) ? a.body.filter(item => item !== "Je ne sais pas").slice(0, 2).join(" et ") : firstMeaningful(a.body);
+  const emotion = firstMeaningful(a.emotionWords, a.emotions);
   const trigger = firstMeaningful(a.triggers);
-  const belief = firstMeaningful(a.belief);
-  const fearCore = firstMeaningful(a.fearCore, a.fearImplication4, a.fearImplication3, a.fearImplication2, a.fearImplication1);
-  const narrative = [
-    `${opening ? `Vous partez de « ${shortAnswer(opening, 155)} »` : "Vous avez décrit une situation qui compte pour vous"}${trigger ? `, qui semble notamment se réactiver lorsque « ${shortAnswer(trigger, 115)} »` : ""}. ${felt ? `Vous y associez « ${shortAnswer(felt, 105)} »` : "Vous avez pris le temps d’observer ce qui se présente"}${body ? `, avec un écho dans ${body.toLocaleLowerCase("fr")}` : ""}. Ces éléments rapprochent la situation, l’émotion et le corps sans prétendre expliquer automatiquement leur cause.`,
-    `${protection ? `Quand cela arrive, vous dites : « ${shortAnswer(protection, 90)} »` : "Une manière de vous protéger apparaît dans vos réponses"}. ${protectionGoal ? `Vos mots lui donnent cette fonction protectrice : « ${shortAnswer(protectionGoal, 125)} ».` : ""}${cost ? ` En même temps, vous constatez ce coût : « ${shortAnswer(cost, 145)} ».` : ""}${belief ? ` La phrase intérieure « ${shortAnswer(belief, 105)} » pourrait contribuer à maintenir ce mouvement ; elle reste une hypothèse à vérifier, et non une vérité sur vous.` : ""}${fearCore ? ` En suivant le chemin de la peur, l’enjeu que vos mots font apparaître est « ${shortAnswer(fearCore, 130)} ».` : ""} ${tensionReading(a)}`.trim(),
-    `${need ? `Sous cette protection, vous nommez ce besoin : « ${shortAnswer(need, 110)} »` : "Votre exploration ouvre un besoin à préciser"}${value ? ` et cette valeur importante : « ${shortAnswer(value, 90)} »` : ""}. ${resource ? `Vous disposez déjà de cette ressource : ${embeddedAnswer(resource, 115)}.` : ""}${choice ? ` Une piste pourrait être de vous en servir pour « ${shortAnswer(choice, 125)} »` : ""}${action ? `, en commençant par « ${shortAnswer(action, 125)} »` : ""}. Si cela résonne pour vous, le nouveau choix n’aurait donc pas à nier ce qui vous protège, mais à lui offrir une réponse plus ajustée à ce dont vous avez besoin aujourd’hui.`
-  ];
+  const factualOpening = `${opening ? `Vous partez de « ${shortAnswer(opening, 155)} »` : "Vous avez décrit ce qui vous préoccupe"}${intention ? `, avec cet élan : « ${shortAnswer(intention, 115)} »` : ""}.`;
+  const connectionParagraphs = connections.map(connection => connection.hypothesis
+    ? `${connection.reading} Cette proposition reste une hypothèse à vérifier, et non une explication de votre fonctionnement.`
+    : connection.reading);
+  const factualFallback = [
+    emotion || trigger ? `${emotion ? `Vous nommez « ${shortAnswer(emotion, 100)} »` : ""}${emotion && trigger ? ", " : ""}${trigger ? `dans ce contexte : « ${shortAnswer(trigger, 125)} »` : ""}.` : "",
+    mechanism,
+    implication
+  ].filter(Boolean).slice(0, 2);
+  const resonance = includesAny(a.connectionResonance, ["Oui, ça me parle"])
+    ? "Vous indiquez que ce rapprochement vous parle ; il peut donc servir de repère pour la suite."
+    : includesAny(a.connectionResonance, ["En partie"])
+      ? `Vous indiquez que ce rapprochement ne correspond qu’en partie.${firstMeaningful(a.connectionNuance) ? ` Votre nuance est essentielle : « ${shortAnswer(a.connectionNuance, 145)} ».` : ""}`
+      : includesAny(a.connectionResonance, ["Non, pas vraiment"])
+        ? "Ce rapprochement ne vous correspond pas : il est donc laissé de côté, sans chercher à le défendre."
+        : "";
+  const movement = `${need ? `Le besoin que vous retenez est « ${shortAnswer(need, 110)} ».` : ""}${value ? ` La valeur « ${shortAnswer(value, 90)} » vous donne un critère pour la suite.` : ""}${resource ? ` Vous pouvez vous appuyer sur « ${shortAnswer(resource, 110)} ».` : ""}${choice ? ` Votre nouveau choix est « ${shortAnswer(choice, 120)} ».` : ""}${action ? ` Il prend une forme concrète avec « ${shortAnswer(action, 125)} ».` : ""}`.trim();
+  const narrative = [factualOpening, ...(connectionParagraphs.length ? connectionParagraphs : factualFallback), resonance, movement].filter(Boolean).slice(0, 5);
 
   return {
     theme,
@@ -1084,7 +1209,10 @@ function usefulAnswersForAI(a) {
     intensiteDebut: a.startIntensity,
     intensiteFin: a.endIntensity
   };
-  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)));
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => {
+    if (value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) return false;
+    return typeof value !== "string" || (!isVagueAnswer(value) && !isIncompleteAnswer(value));
+  }));
 }
 
 async function setupAISummary(a) {
@@ -1190,18 +1318,24 @@ function guideReaction(q) {
 
 function feedbackWorthShowing(q) {
   if (simpleCase()) {
-    return new Set([
-      "reason", "fearCore", "protection", "protectionPurpose", "belief",
-      "need", "newChoice", "takeaway", "action"
-    ]).has(q.id);
+    return new Set(["fearCore", "newChoice", "takeaway"]).has(q.id);
   }
-  return new Set([
-    "reason", "difficulty", "intention", "emotionWords", "immediateNeed", "triggers", "protection",
-    "belief", "need", "value", "newChoice", "takeaway", "action",
-    "resultMeaning", "positiveOutcome", "fearCore", "protectionPurpose", "protectionCost",
-    "otherShould", "selfReturn", "partsDialogue", "partsMovement", "hiddenStrength",
-    "choiceBarrier", "choiceResource", "actionSmall"
-  ]).has(q.id);
+  return new Set(["fearCore", "partsMovement", "newChoice", "takeaway"]).has(q.id);
+}
+
+function conversationLead(q, questions) {
+  if (state.clarificationQuestionId === q.id) return "Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?";
+  const index = questions.findIndex(question => question.id === q.id);
+  const previous = index > 0 ? questions[index - 1] : null;
+  const previousAnswer = previous ? firstMeaningful(state.answers[previous.id]) : "";
+  if (q.id === "protectionPurpose" && firstMeaningful(state.answers.protection)) return `Vous décrivez cette réaction : « ${escapeHtml(shortAnswer(state.answers.protection, 90))} ». Regardons maintenant ce qu’elle cherche à préserver pour vous.`;
+  if (q.id === "protectionCost" && firstMeaningful(state.answers.protectionPurpose)) return `Vous avez précisé ce que cette protection cherche à préserver. Il reste à vérifier, sans le supposer, ce qu’elle vous coûte aujourd’hui.`;
+  if (q.id.startsWith("fearImplication")) return "Votre réponse précise le scénario redouté. Continuez seulement si ce nouvel approfondissement vous paraît réellement utile.";
+  if (q.id === "fearCore") return "Vous avez suivi cette peur aussi loin qu’il vous semblait juste. Vous pouvez maintenant nommer l’enjeu qui ressort de vos propres mots.";
+  if (q.id === "partsMovement") return "Les deux élans ont maintenant une place. Cherchons un mouvement qui ne demande pas à l’un d’écraser l’autre.";
+  if (q.id === "connectionResonance" || q.id === "connectionNuance") return "ÉCLAT rapproche ici plusieurs de vos réponses. Cette proposition reste entièrement à confirmer, nuancer ou refuser par vous.";
+  if (previousAnswer && previous?.adaptive) return `Votre réponse précédente apporte ce repère : « ${escapeHtml(shortAnswer(previousAnswer, 115))} ». Poursuivez seulement avec ce qui vous semble juste.`;
+  return "Prenez votre temps. Une seule question vous est proposée.";
 }
 
 function bind(q) {
@@ -1209,6 +1343,7 @@ function bind(q) {
   if (textarea) {
     textarea.oninput = () => {
       state.answers[q.id] = textarea.value;
+      if (state.clarificationQuestionId === q.id) state.clarificationQuestionId = null;
       save();
     };
   }
@@ -1296,7 +1431,7 @@ function renderStep() {
       <div class="guide-bubble ${state.feedback ? 'feedback' : ''}">
         <button type="button" class="audio-btn" id="speakGuideBtn" title="Écouter la question">🔊</button>
         <span class="guide-name">Votre guide ÉCLAT</span>
-        <p id="guideMessage">${state.feedback ? guideReaction(q) : "Prenez votre temps. Une seule question vous est proposée."}</p>
+        <p id="guideMessage">${state.feedback ? guideReaction(q) : conversationLead(q, currentQuestions)}</p>
       </div>
       ${state.feedback ? '' : `
         <div class="single-question">
@@ -1350,7 +1485,7 @@ function renderSummary(complete = false) {
   const userQuality = a.quality || a.sensitivity || "mes ressources";
   const mantraText = `« Aujourd'hui, je choisis d'honorer ce besoin : <strong>${escapeHtml(userNeed)}</strong>, en m'appuyant sur cette ressource : <strong>${escapeHtml(userQuality)}</strong>. »`;
 
-  const signals = detectedSignals(a).slice(0, 3);
+  const signals = supportedSignals(a).slice(0, 3);
   const signal = signals[0] || null;
   const previous = [...history]
     .filter(item => item.id !== state.id)
@@ -1575,6 +1710,14 @@ $("#nextBtn").onclick = () => {
     const currentQuestions = activeQuestions(state.step);
     const questionId = state.currentQuestionId || currentQuestions[state.question]?.id || null;
     const currentQuestion = currentQuestions.find(question => question.id === questionId);
+    const currentAnswer = currentQuestion ? state.answers[currentQuestion.id] : "";
+    if (currentQuestion?.type === "text" && textValue(currentAnswer).trim() && isIncompleteAnswer(currentAnswer)) {
+      state.clarificationQuestionId = currentQuestion.id;
+      save();
+      renderStep();
+      return;
+    }
+    state.clarificationQuestionId = null;
     if (currentQuestion && !feedbackWorthShowing(currentQuestion)) return moveForwardFrom(questionId);
     state.feedbackQuestionId = questionId;
     state.feedback = true;
