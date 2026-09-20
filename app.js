@@ -1225,7 +1225,7 @@ async function setupAISummary(a) {
   if (!panel || !button || !result || severeDistressDetected(a)) return;
 
   const showSummary = summary => {
-    result.innerHTML = `<h3>Synthèse approfondie</h3><div class="ai-summary-text">${summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
+    result.innerHTML = `<h3>Lecture approfondie</h3><div class="ai-summary-text">${summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
     result.hidden = false;
     button.hidden = true;
   };
@@ -1473,6 +1473,35 @@ function start(fresh = false) {
   renderStep();
 }
 
+function mirrorValue(value) {
+  if (Array.isArray(value)) value = value.join(" · ");
+  if (value === undefined || value === null) return "";
+  const text = String(value).trim();
+  return text && !isVagueAnswer(text) && !isIncompleteAnswer(text) ? text : "";
+}
+
+function mirrorItems(a) {
+  const items = [
+    ["Situation", firstMeaningful(a.reason, a.difficulty)],
+    ["Intensité initiale", a.startIntensity !== undefined && a.startIntensity !== "" ? `${a.startIntensity}/10` : ""],
+    ["Intensité finale", a.endIntensity !== undefined && a.endIntensity !== "" ? `${a.endIntensity}/10` : ""],
+    ["Émotion", firstMeaningful(a.emotionWords, a.emotions)],
+    ["Ressenti corporel", firstMeaningful(a.body, a.bodySignal, a.nowBody)],
+    ["Déclencheur", a.triggers],
+    ["Protection", a.protection],
+    ["Besoin", firstMeaningful(a.need, a.immediateNeed, a.pastNeed)],
+    ["Valeur", a.value],
+    ["Ressource", firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering)]
+  ];
+  return items.map(([label, value]) => ({ label, value: mirrorValue(value) })).filter(item => item.value);
+}
+
+function renderMirror(a) {
+  const items = mirrorItems(a);
+  if (!items.length) return '<p class="mirror-empty">Les éléments déposés restent à préciser.</p>';
+  return `<dl class="mirror-grid">${items.map(item => `<div class="mirror-item"><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join("")}</dl>`;
+}
+
 function renderSummary(complete = false) {
   collect();
   const a = state.answers;
@@ -1564,22 +1593,39 @@ function renderSummary(complete = false) {
   conclusionCard.className = "eclat-conclusion";
   conclusionCard.innerHTML = `
     <div class="conclusion-title">
-      <div><p class="eyebrow">La lecture de votre parcours</p><h2>Synthèse ÉCLAT</h2></div>
+      <div><p class="eyebrow">Votre bilan</p><h2>Synthèse ÉCLAT</h2></div>
       <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
     </div>
-    <div class="conclusion-reading">
-      ${(conclusion.narrative?.length ? conclusion.narrative : [conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm]).filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
-    </div>
-    ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h3>Pour construire une conclusion plus juste</h3><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
-    <div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>
-    <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
-    ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
-    <p class="conclusion-source">${conclusion.insufficient ? "ÉCLAT préfère suspendre sa lecture plutôt que compléter vos réponses à votre place." : "Cette lecture croise uniquement les éléments formulés dans vos réponses."} Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>
-    <div class="ai-summary-panel" id="aiSummaryPanel" hidden>
-      <button class="primary" id="generateAISummary" type="button">✨ Générer une synthèse approfondie</button>
-      <p class="ai-summary-note">Un seul appel facultatif sera effectué. Votre synthèse ÉCLAT reste disponible quoi qu’il arrive.</p>
-      <div class="ai-summary-result" id="aiSummaryResult" aria-live="polite" hidden></div>
-    </div>`;
+
+    <section class="conclusion-block mirror-card" aria-labelledby="mirrorTitle">
+      <p class="conclusion-step">01 · Le miroir factuel</p>
+      <h3 id="mirrorTitle">Ce que vous avez déposé</h3>
+      ${renderMirror(a)}
+    </section>
+
+    <section class="conclusion-block reading-card" aria-labelledby="readingTitle">
+      <p class="conclusion-step">02 · La lecture ÉCLAT</p>
+      <h3 id="readingTitle">Ce que vos réponses semblent relier</h3>
+      <div class="conclusion-reading">
+        ${(conclusion.narrative?.length ? conclusion.narrative : [conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm]).filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
+      </div>
+      ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h4>Pour construire une conclusion plus juste</h4><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
+      ${!conclusion.insufficient ? `<div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>` : ""}
+      <p class="conclusion-source">${conclusion.insufficient ? "ÉCLAT préfère suspendre sa lecture plutôt que compléter vos réponses à votre place." : "Cette lecture croise uniquement les éléments formulés dans vos réponses."} Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>
+      <div class="ai-summary-panel" id="aiSummaryPanel" hidden>
+        <button class="primary" id="generateAISummary" type="button">✨ Générer une synthèse approfondie</button>
+        <p class="ai-summary-note">Un seul appel facultatif sera effectué. Votre synthèse ÉCLAT reste disponible quoi qu’il arrive.</p>
+        <div class="ai-summary-result" id="aiSummaryResult" aria-live="polite" hidden></div>
+      </div>
+    </section>
+
+    <section class="conclusion-block anchoring-card" aria-labelledby="anchoringTitle">
+      <p class="conclusion-step">03 · L’ouverture concrète</p>
+      <h3 id="anchoringTitle">Votre point d’ancrage</h3>
+      <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
+      ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
+      ${complete ? `<p class="anchoring-invitation">Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît, pour comparer votre bilan.</p>` : ""}
+    </section>`
   $("#transformationCard").after(conclusionCard);
   setupAISummary(a);
 
