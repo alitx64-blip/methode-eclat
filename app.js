@@ -646,9 +646,12 @@ function selectUsefulQuestions(stepIndex, questions) {
     .filter(item => item.score >= 0)
     .sort((left, right) => right.score - left.score);
 
-  const remainingGlobal = Math.max(0, journeyInteractionLimit(a) - new Set(state.interactionTrail || []).size);
+  const trail = new Set(state.interactionTrail || []);
+  const remainingGlobal = Math.max(0, journeyInteractionLimit(a) - trail.size);
   const futureReserve = Math.max(0, STEPS.length - stepIndex - 1);
-  const allowance = Math.min(limits[stepIndex], Math.max(0, remainingGlobal - futureReserve));
+  const usedInStep = questions.filter(question => trail.has(question.id)).length;
+  const remainingInStep = Math.max(0, limits[stepIndex] - usedInStep);
+  const allowance = Math.min(remainingInStep, Math.max(0, remainingGlobal - futureReserve));
   const selected = unanswered.slice(0, allowance).map(item => item.question);
   const ids = new Set([...preserved, ...selected].map(question => question.id));
   return questions.filter(question => ids.has(question.id));
@@ -1795,7 +1798,7 @@ function renderSummary(complete = false) {
   $("#summaryContent").innerHTML = STEPS.map((s, i) => `
     <article class="summary-card">
       <h3>${s.title}</h3>
-      ${activeQuestions(i).map(q => {
+      ${activeQuestions(i).filter(q => hasText(a[q.id])).map(q => {
         let v = a[q.id];
         if (Array.isArray(v)) v = v.join(" · ");
         const empty = v === undefined || v === "";
