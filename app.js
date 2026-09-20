@@ -932,8 +932,29 @@ function renderNav() {
 function question(q) {
   const val = state.answers[q.id] ?? (q.type === "scale" ? 5 : q.type === "chips" ? [] : "");
   const cls = q.adaptive ? ' adaptive-question' : '';
-  const badge = q.adaptive ? '<p class="adaptive-label">Une relance pour approfondir</p>' : '';
+  const badge = q.adaptive ? '<p class="adaptive-label">Un point utile à éclairer</p>' : '';
   
+  if (q.id === "connectionResonance") {
+    const pending = new Set(state.pendingConnectionIds || []);
+    const proposed = connectionPool(state.answers).filter(connection => pending.has(connection.id)).slice(0, 2);
+    const facts = [...new Set(proposed.flatMap(connection => connection.facts || []).filter(Boolean))].slice(0, 2);
+    const rejected = includesAny(val, ["Non, pas vraiment"]);
+    return `
+      <article class="question-card connection-moment${rejected ? " connection-rejected" : ""}">
+        <p class="connection-kicker">Un rapprochement possible</p>
+        <h3>Deux éléments que vous avez exprimés</h3>
+        <div class="connection-pair">
+          ${facts.map((fact, index) => `<blockquote><small>${index === 0 ? "D’un côté" : "De l’autre"}</small>« ${escapeHtml(shortAnswer(fact, 125))} »</blockquote>`).join("")}
+        </div>
+        <div class="question-title">Est-ce que vous voyez un lien entre les deux&nbsp;?</div>
+        <p class="question-hint">C’est une proposition à confirmer, nuancer ou laisser de côté.</p>
+        <div class="chips connection-choices" data-id="${q.id}">
+          ${q.options.map(option => `<button type="button" class="chip ${val.includes(option) ? "selected" : ""}" aria-pressed="${val.includes(option)}" data-value="${escapeHtml(option)}">${escapeHtml(option)}</button>`).join("")}
+        </div>
+        <p class="connection-dismissed-note">Ce rapprochement est refermé et ne sera pas utilisé dans votre synthèse.</p>
+      </article>`;
+  }
+
   if (q.type === "chips") {
     return `
       <article class="question-card${cls}">
@@ -1531,10 +1552,45 @@ function bind(q) {
         }
         c.classList.toggle("selected");
         c.setAttribute("aria-pressed", nextArr.includes(v));
+        if (q.id === "connectionResonance") {
+          const card = c.closest(".connection-moment");
+          card?.classList.toggle("connection-rejected", v === "Non, pas vraiment" && nextArr.includes(v));
+        }
         save();
       };
     });
   }
+}
+
+function qualitativeProgress(a = state.answers, currentQuestion = null) {
+  const coverage = journeyCoverage(a);
+  const hasConnection = (state.validatedConnectionIds || []).length > 0;
+  const connectionPending = currentQuestion?.id === "connectionResonance";
+  if (coverage.action) return { label: "Un mouvement concret se dessine", value: 94 };
+  if (coverage.resource || coverage.choice) return { label: "Une nouvelle direction apparaît", value: 80 };
+  if (hasConnection) return { label: "Un rapprochement a été confirmé", value: 70 };
+  if (connectionPending) return { label: "Un rapprochement est à vérifier", value: 62 };
+  if (coverage.protection || coverage.trigger) return { label: "Votre manière de réagir s’éclaire", value: 52 };
+  if (coverage.emotion || coverage.body) return { label: "Votre ressenti se précise", value: 34 };
+  if (coverage.situation) return { label: "Votre point de départ est posé", value: 18 };
+  return { label: "Votre fil commence ici", value: 6 };
+}
+
+function threadHighlights(a = state.answers) {
+  const values = [
+    firstMeaningful(a.reason, a.difficulty),
+    firstMeaningful(a.emotionWords, a.emotions),
+    firstMeaningful(a.protection),
+    firstMeaningful(a.need, a.immediateNeed),
+    firstMeaningful(a.value)
+  ].filter(Boolean);
+  return [...new Set(values)].slice(-3).map(value => shortAnswer(value, 72));
+}
+
+function renderThread(a = state.answers) {
+  const highlights = threadHighlights(a);
+  if (!highlights.length) return "";
+  return `<div class="thread-strip" aria-label="Votre fil actuel"><small>Votre fil</small>${highlights.map(value => `<span>${escapeHtml(value)}</span>`).join("")}</div>`;
 }
 
 function renderStep() {
@@ -1581,13 +1637,12 @@ function renderStep() {
   state.interactionTrail ||= [];
   if (q?.id && !state.interactionTrail.includes(q.id)) state.interactionTrail.push(q.id);
   
-  let total = STEPS.reduce((n, x, idx) => n + activeQuestions(idx).length, 0);
-  let done = STEPS.slice(0, state.step).reduce((n, x, idx) => n + activeQuestions(idx).length, 0) + state.question + 1;
-
-  $("#stepNumber").textContent = `${s.title} · question ${state.question + 1}/${currentQuestions.length}`;
-  const rawProgress = (done / total) * 100;
-  state.progressMax = Math.max(Number(state.progressMax) || 0, rawProgress);
+  const progress = qualitativeProgress(state.answers, q);
+  $("#stepNumber").textContent = progress.label;
+  state.progressMax = Math.max(Number(state.progressMax) || 0, progress.value);
   $("#progressBar").style.width = `${state.progressMax}%`;
+  $(".progress")?.setAttribute("aria-valuenow", String(Math.round(state.progressMax)));
+  $(".progress")?.setAttribute("aria-label", progress.label);
 
   const pause = (state.step === 2 && state.question === 0) ? `
     <div class="pause-box">
@@ -1596,17 +1651,15 @@ function renderStep() {
     </div>` : "";
 
   let intro = state.question === 0 ? `
-    <p class="eyebrow">0${state.step + 1}</p>
-    <h2>${s.title}</h2>
-    <p class="step-intro">${s.intro}</p>
-    <div class="guidance">${GUIDANCE[state.step]}</div>
+    <div class="movement-marker"><span>0${state.step + 1}</span><strong>${s.title}</strong></div>
+    ${state.step === 0 ? `<p class="movement-intro">${s.intro}</p>` : ""}
     ${pause}
-    ${state.step === 4 ? resourceSuggestion() : ""}
   ` : "";
 
   stepContent.innerHTML = `
     <div class="conversation">
       ${intro}
+      ${renderThread(state.answers)}
       ${state.clarificationQuestionId === q.id ? '<p class="question-hint clarification-note">Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?</p>' : ''}
       <p class="conversation-lead">${conversationLead(q, currentQuestions)}</p>
       <div class="single-question">
