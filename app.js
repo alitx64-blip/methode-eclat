@@ -1201,7 +1201,11 @@ function connectionCandidates(a) {
 
 function connectionPool(a) {
   const invalidated = new Set(state.invalidatedConnectionIds || []);
-  const candidates = connectionCandidates(a).filter(connection => !invalidated.has(connection.id));
+  const rejectedSameTension = invalidated.has("freedomSecurity") || invalidated.has("internalTension");
+  const candidates = connectionCandidates(a).filter(connection =>
+    !invalidated.has(connection.id) &&
+    !(rejectedSameTension && ["freedomSecurity", "internalTension"].includes(connection.id))
+  );
   return candidates.some(connection => connection.id === "freedomSecurity")
     ? candidates.filter(connection => connection.id !== "internalTension")
     : candidates;
