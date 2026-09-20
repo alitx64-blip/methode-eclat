@@ -170,7 +170,7 @@ async function soumettreEtAnalyser() {
   afficherChargement(true);
 
   try {
-    const response = await fetch("/api/maieutique", {
+    const response = await fetch("/api/synthese", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -189,7 +189,7 @@ async function soumettreEtAnalyser() {
     }
   } catch (error) {
     console.error("Erreur API :", error);
-    afficherErreur("Impossible de générer l'analyse. Vos réponses restent conservées sur votre téléphone.");
+    afficherErreur("Impossible de générer la synthèse. Vos réponses restent conservées sur votre téléphone.");
   } finally {
     afficherChargement(false);
   }
