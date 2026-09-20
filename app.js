@@ -630,34 +630,7 @@ function journeyInteractionLimit(a = state.answers) {
   return complex ? 12 : 10;
 }
 
-function selectUsefulQuestions(stepIndex, questions) {
-  const a = state.answers;
-  const coverage = journeyCoverage(a);
-  const limits = [2, 2, 3, 2, 1, 2];
-  const preserved = questions.filter(question =>
-    hasText(a[question.id]) ||
-    state.currentQuestionId === question.id ||
-    state.feedbackQuestionId === question.id
-  );
-  const preservedIds = new Set(preserved.map(question => question.id));
-  const unanswered = questions
-    .filter(question => !preservedIds.has(question.id) && !hasText(a[question.id]))
-    .map(question => ({ question, score: questionUsefulness(question, stepIndex, coverage, a) }))
-    .filter(item => item.score >= 0)
-    .sort((left, right) => right.score - left.score);
-
-  const trail = new Set(state.interactionTrail || []);
-  const remainingGlobal = Math.max(0, journeyInteractionLimit(a) - trail.size);
-  const futureReserve = Math.max(0, STEPS.length - stepIndex - 1);
-  const usedInStep = questions.filter(question => trail.has(question.id)).length;
-  const remainingInStep = Math.max(0, limits[stepIndex] - usedInStep);
-  const allowance = Math.min(remainingInStep, Math.max(0, remainingGlobal - futureReserve));
-  const selected = unanswered.slice(0, allowance).map(item => item.question);
-  const ids = new Set([...preserved, ...selected].map(question => question.id));
-  return questions.filter(question => ids.has(question.id));
-}
-
-function activeQuestions(stepIndex) {
+function stageQuestionCandidates(stepIndex) {
   const base = STEPS[stepIndex].questions.filter(question =>
     baseQuestionVisible(stepIndex, question) || hasText(state.answers[question.id]) || state.currentQuestionId === question.id || state.feedbackQuestionId === question.id
   );
@@ -685,7 +658,7 @@ function activeQuestions(stepIndex) {
   const protectionRoot = stepIndex === 2 && hasAny(state.answers.protection)
     ? rootCandidates.find(question => question.id === "protectionPurpose")
     : null;
-  const primaryRoots = rootCandidates.filter(question => question.id !== "protectionPurpose").slice(0, genericLimit);
+  const primaryRoots = rootCandidates.filter(question => question.id !== "protectionPurpose");
   const genericRoots = [...primaryRoots, ...(protectionRoot ? [protectionRoot] : [])];
   const generic = [];
   const addGenericChain = question => {
@@ -710,9 +683,161 @@ function activeQuestions(stepIndex) {
   const result = [];
   const addAfter = id => stableEligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
   base.forEach(q => { result.push(q); addAfter(q.id); });
-  return selectUsefulQuestions(stepIndex, result);
+  return result;
 }
 
+
+const DIRECT_FOLLOW_UPS = {
+  reason: ["triggers", "emotions", "body", "protection", "immediateNeed", "intention", "startIntensity"],
+  difficulty: ["emotions", "triggers", "body", "protection", "immediateNeed"],
+  intention: ["resultMeaning", "startIntensity", "emotions"],
+  resultMeaning: ["startIntensity", "emotions"],
+  emotions: ["body", "triggers", "fearScenario", "emotionMessage"],
+  emotionWords: ["body", "triggers", "fearScenario"],
+  body: ["bodySignal", "triggers", "immediateNeed"],
+  bodySignal: ["immediateNeed", "triggers"],
+  triggers: ["protection", "emotions", "recurrence", "fearScenario"],
+  recurrence: ["commonThread", "protection", "familiar"],
+  protection: ["protectionPurpose", "protectionCost", "need"],
+  protectionPurpose: ["protectionCost", "need"],
+  protectionCost: ["need", "quality", "newChoice"],
+  fearScenario: ["fearImplication1", "fearCore"],
+  fearImplication1: ["fearImplication2", "fearCore"],
+  fearImplication2: ["fearDepthChoice", "fearCore"],
+  fearDepthChoice: ["fearImplication3", "fearCore"],
+  fearImplication3: ["fearImplication4", "fearCore"],
+  fearImplication4: ["fearCore"],
+  fearCore: ["need", "connectionResonance", "quality"],
+  need: ["partsDialogue", "connectionResonance", "value", "quality"],
+  partsDialogue: ["partsMovement"],
+  partsMovement: ["connectionResonance", "quality", "newChoice"],
+  connectionResonance: ["connectionNuance", "quality", "newChoice"],
+  connectionNuance: ["quality", "newChoice"],
+  value: ["quality", "newChoice"],
+  quality: ["newChoice", "action"],
+  choiceResource: ["newChoice", "action"],
+  newChoice: ["action", "actionSmall"],
+  actionSmall: ["actionWhen", "endIntensity"],
+  action: ["successEvidence", "endIntensity"],
+  successEvidence: ["endIntensity"]
+};
+
+function activeQuestions(stepIndex) {
+  return stageQuestionCandidates(stepIndex);
+}
+
+function globalQuestionPool() {
+  const pool = new Map();
+  STEPS.forEach((_, stepIndex) => {
+    stageQuestionCandidates(stepIndex).forEach(question => {
+      if (!pool.has(question.id)) pool.set(question.id, { ...question, stepIndex });
+    });
+  });
+  Object.entries(state.adaptiveQuestionBank || {}).forEach(([stepIndex, questions]) => {
+    (questions || []).forEach(question => {
+      if (!pool.has(question.id)) pool.set(question.id, { ...question, stepIndex: +stepIndex });
+    });
+  });
+  return [...pool.values()];
+}
+
+function questionById(questionId) {
+  return globalQuestionPool().find(question => question.id === questionId) || null;
+}
+
+function routedQuestions() {
+  return (state.interactionTrail || []).map(questionById).filter(Boolean);
+}
+
+function connectionHasBeenTested(a = state.answers) {
+  const tested = (state.validatedConnectionIds || []).length + (state.invalidatedConnectionIds || []).length;
+  return tested > 0 || !connectionRestitution(a);
+}
+
+function synthesisMaterialIsEnough(a = state.answers) {
+  const coverage = journeyCoverage(a);
+  const understanding = [coverage.emotion, coverage.trigger, coverage.protection, coverage.need].filter(Boolean).length;
+  const direction = coverage.resource || coverage.choice;
+  return coverage.situation && understanding >= 2 && direction && coverage.action && connectionHasBeenTested(a);
+}
+
+function routingScore(question, lastQuestionId = null) {
+  const a = state.answers;
+  const coverage = journeyCoverage(a);
+  const id = question.id;
+  const understanding = [coverage.emotion, coverage.trigger, coverage.protection, coverage.need].filter(Boolean).length;
+  let score = questionUsefulness(question, question.stepIndex, coverage, a);
+  if (score < 0) return -1;
+
+  const trail = state.interactionTrail || [];
+  const remaining = journeyInteractionLimit(a) - trail.length;
+  const direct = DIRECT_FOLLOW_UPS[lastQuestionId] || [];
+  const directIndex = direct.indexOf(id);
+  if (question.after === lastQuestionId) score += 105;
+  if (directIndex >= 0) score += 90 - directIndex * 5;
+
+  const lastQuestion = questionById(lastQuestionId);
+  if (lastQuestion && lastQuestion.type !== question.type) score += 4;
+
+  if (id === "body" && !coverage.body && !coverage.emotion && !(+a.startIntensity >= 7)) return -1;
+  if (["bodySignal", "nowBody"].includes(id) && !coverage.body) return -1;
+  if (["familiar", "pastNeed", "beliefOrigin"].includes(id) &&
+      !/\b(encore|souvent|toujours|chaque fois|depuis longtemps|se repete|revient|familier|souvenir)\b/.test(responseCorpus(a))) return -1;
+  if (id === "connectionResonance" && !connectionRestitution(a)) return -1;
+  if (id === "connectionResonance" && connectionRestitution(a)) score += 140;
+  if (id === "partsDialogue" && partsConflict(a)) score += 155;
+  if (id === "connectionNuance" && !includesAny(a.connectionResonance, ["En partie"])) return -1;
+  if (["quality", "choiceResource"].includes(id) && !(coverage.need || coverage.protection || coverage.belief || coverage.intention)) return -1;
+  if (["quality", "choiceResource", "newChoice"].includes(id) && understanding < 2) score -= 120;
+  if (id === "newChoice" && !(coverage.resource || coverage.need || coverage.protection)) return -1;
+  if (["action", "actionSmall"].includes(id) && (!coverage.choice || understanding < 2)) return -1;
+  if (id === "endIntensity" && !coverage.action) return -1;
+  if (id === "successEvidence" && !coverage.action) return -1;
+
+  if (remaining <= 3) {
+    if (["quality", "choiceResource", "newChoice", "action", "actionSmall", "endIntensity"].includes(id)) score += 80;
+    else if (!["connectionResonance", "connectionNuance"].includes(id)) score -= 50;
+  }
+  if (remaining <= 1 && coverage.action && id === "endIntensity") score += 130;
+  return score;
+}
+
+function nextGlobalQuestion(lastQuestionId = null) {
+  const a = state.answers;
+  const trail = state.interactionTrail || [];
+  if (!trail.length && !hasText(a.reason)) {
+    return globalQuestionPool().find(question => question.id === "reason") || null;
+  }
+  if (synthesisMaterialIsEnough(a)) return null;
+
+  const limit = journeyInteractionLimit(a);
+  const used = new Set(trail);
+  let candidates = globalQuestionPool()
+    .filter(question => !used.has(question.id) && !hasText(a[question.id]))
+    .map(question => ({ question, score: routingScore(question, lastQuestionId) }))
+    .filter(item => item.score >= 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (trail.length >= limit) {
+    const coverage = journeyCoverage(a);
+    if (!coverage.action && trail.length < 12) {
+      candidates = candidates.filter(item => ["quality", "choiceResource", "newChoice", "action", "actionSmall"].includes(item.question.id));
+    } else if (!coverage.intensityEnd && coverage.action && trail.length < 12) {
+      candidates = candidates.filter(item => item.question.id === "endIntensity");
+    } else {
+      return null;
+    }
+  }
+  return candidates[0]?.question || null;
+}
+
+function selectGlobalQuestion(question) {
+  if (!question) return false;
+  state.currentQuestionId = question.id;
+  state.step = Number.isInteger(question.stepIndex) ? question.stepIndex : 0;
+  state.question = 0;
+  return true;
+}
 function resolvedQuestionIndex(questions, questionId, fallbackIndex = 0) {
   const identified = questionId ? questions.findIndex(question => question.id === questionId) : -1;
   if (identified >= 0) return identified;
@@ -912,21 +1037,11 @@ function escapeHtml(v = "") {
 
 function renderNav() {
   const nav = $("#stepNav");
-  nav.innerHTML = STEPS.map((s, i) => `
-    <button type="button" data-step="${i}" class="${i === state.step ? 'active' : ''} ${i < state.step ? 'done' : ''}">
-      <span>${i < state.step ? '✓' : i + 1}</span>${escapeHtml(s.title)}
-    </button>
-  `).join("");
-
-  nav.querySelectorAll("button").forEach(b => {
-    b.onclick = () => {
-      collect();
-      state.step = +b.dataset.step;
-      state.question = 0;
-      state.feedback = false;
-      renderStep();
-    };
-  });
+  nav.innerHTML = `
+    <div class="global-route-label">
+      <span>✦</span>
+      <p><small>Exploration en cours</small><strong>ÉCLAT suit le fil de vos réponses</strong></p>
+    </div>`;
 }
 
 function question(q) {
@@ -1598,16 +1713,18 @@ function renderThread(a = state.answers) {
 }
 
 function renderStep() {
-  state.question = Number.isInteger(state.question) ? state.question : 0;
   state.feedback = false;
   state.feedbackQuestionId = null;
-  
+  state.interactionTrail ||= [];
   renderNav();
 
-  const s = STEPS[state.step];
-  const currentQuestions = activeQuestions(state.step);
-  const anchorId = state.feedback ? (state.feedbackQuestionId || state.currentQuestionId) : state.currentQuestionId;
-  selectQuestion(currentQuestions, resolvedQuestionIndex(currentQuestions, anchorId, state.question));
+  let q = questionById(state.currentQuestionId);
+  if (!q) {
+    q = nextGlobalQuestion(state.interactionTrail.at(-1) || null);
+    if (!q) return renderSummary(true);
+    selectGlobalQuestion(q);
+  }
+  if (!state.interactionTrail.includes(q.id)) state.interactionTrail.push(q.id);
 
   $("#nextBtn").style.display = "";
   if (severeDistressDetected()) {
@@ -1620,27 +1737,11 @@ function renderStep() {
           <div><b>ÉCLAT s’arrête ici pour ne pas pousser l’introspection.</b><br>Ce que vous avez écrit appelle un soutien humain immédiat. Ne restez pas seul·e : contactez maintenant une personne de confiance, un professionnel, le 3114 en France (gratuit, 24 h/24 et 7 j/7), ou les urgences au 15/112. Si vous êtes ailleurs, contactez le numéro d’urgence local. Si vous êtes en danger, éloignez-vous de tout moyen de vous faire du mal et allez vers une personne ou un lieu sûr.</div>
         </div>
       </div>`;
-    $("#previousBtn").style.visibility = "visible";
+    $("#previousBtn").style.visibility = state.interactionTrail.length > 1 ? "visible" : "hidden";
     $("#nextBtn").style.display = "none";
     return;
   }
 
-  if (!currentQuestions.length) {
-    const nextStep = STEPS.findIndex((_, index) => index > state.step && activeQuestions(index).length);
-    if (nextStep >= 0) {
-      state.step = nextStep;
-      state.question = 0;
-      state.currentQuestionId = null;
-      save();
-      return renderStep();
-    }
-    return renderSummary(true);
-  }
-
-  const q = currentQuestions[state.question];
-  state.interactionTrail ||= [];
-  if (q?.id && !state.interactionTrail.includes(q.id)) state.interactionTrail.push(q.id);
-  
   const progress = qualitativeProgress(state.answers, q);
   $("#stepNumber").textContent = progress.label;
   state.progressMax = Math.max(Number(state.progressMax) || 0, progress.value);
@@ -1648,24 +1749,13 @@ function renderStep() {
   $(".progress")?.setAttribute("aria-valuenow", String(Math.round(state.progressMax)));
   $(".progress")?.setAttribute("aria-label", progress.label);
 
-  const pause = (state.step === 2 && state.question === 0) ? `
-    <div class="pause-box">
-      <span>♡</span>
-      <div><b>Vous restez libre.</b><br>Si un souvenir ou une émotion devient trop intense, faites une pause et revenez à ce qui vous entoure ici et maintenant.</div>
-    </div>` : "";
-
-  let intro = state.question === 0 ? `
-    <div class="movement-marker"><span>0${state.step + 1}</span><strong>${s.title}</strong></div>
-    ${state.step === 0 ? `<p class="movement-intro">${s.intro}</p>` : ""}
-    ${pause}
-  ` : "";
-
+  const route = routedQuestions();
+  const lead = conversationLead(q, route);
   stepContent.innerHTML = `
     <div class="conversation">
-      ${intro}
       ${renderThread(state.answers)}
       ${state.clarificationQuestionId === q.id ? '<p class="question-hint clarification-note">Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?</p>' : ''}
-      ${conversationLead(q, currentQuestions) ? `<p class="conversation-lead">${conversationLead(q, currentQuestions)}</p>` : ""}
+      ${lead ? `<p class="conversation-lead">${lead}</p>` : ""}
       <div class="single-question">
         ${question(q)}
         <p class="skip-note">Vous pouvez continuer sans répondre.</p>
@@ -1674,8 +1764,8 @@ function renderStep() {
   `;
 
   bind(q);
-
-  $("#previousBtn").style.visibility = (!state.step && !state.question) ? "hidden" : "visible";
+  const routeIndex = state.interactionTrail.indexOf(q.id);
+  $("#previousBtn").style.visibility = routeIndex > 0 ? "visible" : "hidden";
   $("#nextBtn").innerHTML = "Confier ma réponse →";
 }
 
@@ -1937,56 +2027,35 @@ $("#newSession").onclick = () => {
 $("#resumeSession").onclick = () => start(false);
 
 function moveForwardFrom(questionId) {
-  const currentQuestions = activeQuestions(state.step);
-  const currentIndex = resolvedQuestionIndex(currentQuestions, questionId || state.currentQuestionId, state.question);
   state.feedback = false;
   state.feedbackQuestionId = null;
+  const trail = state.interactionTrail || [];
+  const currentIndex = trail.indexOf(questionId || state.currentQuestionId);
 
-  const nextUnanswered = currentQuestions.findIndex((question, index) =>
-    index > currentIndex && !hasText(state.answers[question.id])
-  );
-  if (nextUnanswered >= 0) {
-    selectQuestion(currentQuestions, nextUnanswered);
+  if (currentIndex >= 0 && currentIndex < trail.length - 1) {
+    selectGlobalQuestion(questionById(trail[currentIndex + 1]));
     save();
     return renderStep();
   }
 
-  for (let stepIndex = state.step + 1; stepIndex < STEPS.length; stepIndex++) {
-    const nextQuestions = activeQuestions(stepIndex);
-    const nextIndex = nextQuestions.findIndex(question => !hasText(state.answers[question.id]));
-    if (nextIndex >= 0) {
-      state.step = stepIndex;
-      selectQuestion(nextQuestions, nextIndex);
-      save();
-      return renderStep();
-    }
-  }
-  return renderSummary(true);
+  const nextQuestion = nextGlobalQuestion(questionId || state.currentQuestionId);
+  if (!nextQuestion) return renderSummary(true);
+  selectGlobalQuestion(nextQuestion);
+  save();
+  return renderStep();
 }
 
 $("#previousBtn").onclick = () => {
-  if (state.feedback) {
-    state.feedback = false;
-    state.feedbackQuestionId = null;
-  } else {
-    const currentQuestions = activeQuestions(state.step);
-    const currentIndex = resolvedQuestionIndex(currentQuestions, state.currentQuestionId, state.question);
-    if (currentIndex > 0) {
-      selectQuestion(currentQuestions, currentIndex - 1);
-    } else if (state.step > 0) {
-      state.step--;
-      const previousQuestions = activeQuestions(state.step);
-      selectQuestion(previousQuestions, previousQuestions.length - 1);
-    }
-  }
+  const trail = state.interactionTrail || [];
+  const currentIndex = trail.indexOf(state.currentQuestionId);
+  if (currentIndex > 0) selectGlobalQuestion(questionById(trail[currentIndex - 1]));
   save();
   renderStep();
 };
 
 $("#nextBtn").onclick = () => {
-  const currentQuestions = activeQuestions(state.step);
-  const questionId = state.currentQuestionId || currentQuestions[state.question]?.id || null;
-  const currentQuestion = currentQuestions.find(question => question.id === questionId);
+  const currentQuestion = questionById(state.currentQuestionId);
+  const questionId = currentQuestion?.id || null;
   const currentAnswer = currentQuestion ? state.answers[currentQuestion.id] : "";
   if (currentQuestion?.type === "text" && textValue(currentAnswer).trim() && isIncompleteAnswer(currentAnswer)) {
     state.clarificationQuestionId = currentQuestion.id;
