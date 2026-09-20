@@ -1,5 +1,5 @@
 // Modèle Gemini disponible dans l’offre gratuite, modifiable avec GEMINI_MODEL.
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
