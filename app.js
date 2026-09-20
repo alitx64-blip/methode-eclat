@@ -1,55 +1,55 @@
-/* Application ÉCLAT — Version Autonome, Épurée & Maïeutique */
+/* Application ÉCLAT — Version Autonome & Maïeutique Enrichie */
 
 const STEPS = [
   {
     id: "E",
     title: "É — Épreuve actuelle",
-    intro: "Partir du présent et laisser apparaître précisément ce qui pèse aujourd’hui.",
+    intro: "Partir du présent et clarifier précisément ce qui pèse aujourd’hui.",
     questions: [
-      { id: "reason", label: "Qu’est-ce qui vous amène aujourd’hui ?", type: "text", hint: "Écrivez ce qui vient, sans chercher tout de suite à l’expliquer." },
-      { id: "difficulty", label: "Qu’est-ce qui est le plus difficile pour vous dans cette situation ?", type: "text" },
-      { id: "intention", label: "À la place de cette difficulté, quelle situation aimeriez-vous vivre ?", type: "text" }
+      { id: "reason", label: "Qu’est-ce qui vous amène aujourd’hui ?", type: "text", hint: "Déposez la situation telle qu'elle vient, sans chercher à la juger." },
+      { id: "difficulty", label: "Qu’est-ce qui est le plus difficile ou inconfortable pour vous dans cette situation ?", type: "text" },
+      { id: "intention", label: "Si cette difficulté était surmontée, que ressentiriez-vous ou que feriez-vous de différent ?", type: "text", hint: "Formulez ce que vous souhaitez voir apparaître (ex: sérénité, clarté, liberté)." }
     ]
   },
   {
     id: "C",
     title: "C — Corps & émotions",
-    intro: "Accueillir les signaux du corps et les émotions.",
+    intro: "Accueillir les signaux du corps et nommer l'émotion dominante.",
     questions: [
-      { id: "emotions", label: "Lorsque vous pensez à cette situation, qu’est-ce qui apparaît ?", type: "chips", options: ["Colère / agacement", "Tristesse", "Peur", "Anxiété / angoisse", "Culpabilité", "Honte", "Jalousie", "Impuissance", "Confusion", "Autre"] },
+      { id: "emotions", label: "Lorsque vous pensez à cette situation, quelle émotion prédomine ?", type: "chips", options: ["Colère / Agacement", "Tristesse / Peine", "Peur / Inquiétude", "Anxiété / Angoisse", "Culpabilité", "Honte", "Jalousie / Envie", "Impuissance", "Confusion"] },
       { id: "emotionWords", label: "Avec vos propres mots, comment décririez-vous ce ressenti ?", type: "text" },
-      { id: "body", label: "Où le ressentez-vous dans votre corps ?", type: "chips", options: ["Tête", "Gorge", "Poitrine", "Ventre", "Dos", "Épaules", "Bras / mains", "Jambes", "Partout", "Je ne sais pas"] },
-      { id: "immediateNeed", label: "De quoi auriez-vous besoin à cet instant ?", type: "text" }
+      { id: "body", label: "Où cette émotion se manifeste-t-elle principalement dans votre corps ?", type: "chips", options: ["Tête / Pression", "Gorge / Nœud", "Poitrine / Oppression", "Ventre / Tension", "Dos / Épaules", "Partout", "Je ne sais pas"] },
+      { id: "immediateNeed", label: "De quoi auriez-vous le plus besoin à cet instant ?", type: "chips", options: ["Sécurité", "Reconnaissance / Écoute", "Autonomie / Liberté", "Apaisement / Repos", "Clarté", "Espace / Place"] }
     ]
   },
   {
     id: "L",
-    title: "L — Liens & répétitions",
-    intro: "Observer le fil rouge sans forcer l'analyse.",
+    title: "L — Liens & automatismes",
+    intro: "Observer les mécanismes de protection et les schémas répétitifs.",
     questions: [
-      { id: "recurrence", label: "Est-ce quelque chose qui semble se répéter ?", type: "chips", options: ["Situation isolée", "Cela revient parfois", "Cela revient souvent", "Je ne sais pas"] },
-      { id: "triggers", label: "Qu’est-ce qui déclenche généralement cette réaction ?", type: "text" },
-      { id: "protection", label: "Que faites-vous habituellement pour vous protéger ?", type: "chips", options: ["Je fuis", "Je contrôle", "Je me tais", "Je m’adapte", "Je me défends", "Je me coupe de mes émotions", "Autre"] }
+      { id: "recurrence", label: "Cette réaction vous semble-t-elle familière ?", type: "chips", options: ["C'est ponctuel", "Cela revient parfois", "C'est un schéma récurrent", "Je ne sais pas"] },
+      { id: "triggers", label: "Quel a été l'élément déclencheur précis (un mot, une attitude, un événement) ?", type: "text" },
+      { id: "protection", label: "Que faites-vous habituellement pour faire face ou vous protéger ?", type: "chips", options: ["Je fuis / Je m'isole", "Je tente de tout contrôler", "Je me tais / Je subis", "Je m'adapte à l'autre", "Je me défends / Attaque", "Je me coupe de mon ressenti"] }
     ]
   },
   {
     id: "A",
-    title: "A — Axe essentiel",
-    intro: "Nommer le besoin fondamental et la croyance sous-jacente.",
+    title: "A — Axe essentiel & croyance",
+    intro: "Identifier la règle intérieure ou la peur racine.",
     questions: [
-      { id: "coreWord", label: "Si cette difficulté portait un seul mot, lequel serait-il ?", type: "text" },
-      { id: "belief", label: "Quelle phrase intérieure semble se cacher derrière ?", type: "text", hint: "Ex : « Je ne suis pas assez… », « Je n’ai pas le droit de… »" },
-      { id: "need", label: "Quel besoin important n’est pas suffisamment entendu ?", type: "text" }
+      { id: "belief", label: "Quelle phrase ou conviction intérieure semble dicter cette réaction ?", type: "text", hint: "Ex : « Je dois toujours… », « Je n’ai pas le droit de… », « Si je dis non, je vais… »" },
+      { id: "worstFear", label: "Si cette crainte se réalisait complètement, qu'est-ce que cela impliquerait au pire pour vous ?", type: "text", hint: "Descendez jusqu'à la peur fondamentale (ex: me retrouver seul, ne plus être aimé, perdre le contrôle)." },
+      { id: "deepNeed", label: "Quel besoin fondamental demande à être entendu à travers cette épreuve ?", type: "text" }
     ]
   },
   {
     id: "T",
-    title: "T — Trésor & Ancrage",
-    intro: "Révéler la ressource et choisir un premier pas.",
+    title: "T — Trésor & nouvel ancrage",
+    intro: "Transformer le regard, reconnaître vos ressources et choisir l'action.",
     questions: [
-      { id: "quality", label: "Quelle force ou qualité avez-vous développée à travers cette expérience ?", type: "text" },
-      { id: "newChoice", label: "Qu’aimeriez-vous choisir à la place de l’ancien fonctionnement ?", type: "text" },
-      { id: "action", label: "Quelle petite action simple pourrait soutenir ce changement aujourd'hui ?", type: "text" }
+      { id: "resource", label: "Quelle qualité ou force cette expérience vous oblige-t-elle à développer ?", type: "text" },
+      { id: "newPerspective", label: "Comment pourriez-vous reformuler cette situation de manière plus juste envers vous-même ?", type: "text" },
+      { id: "action", label: "Quelle petite action concrète et réaliste pouvez-vous poser pour incarner ce changement ?", type: "text" }
     ]
   }
 ];
