@@ -622,10 +622,18 @@ function questionUsefulness(question, stepIndex, coverage, a = state.answers) {
   return score;
 }
 
+function journeyInteractionLimit(a = state.answers) {
+  if (simpleCase(a)) return 8;
+  const complex = +a.startIntensity >= 8 || partsConflict(a) || relationshipContext(a) ||
+    includesAny(a.recurrence, ["Cela revient souvent"]) ||
+    /\b(depuis longtemps|toujours|plusieurs annees|tres intense|submerge\w*)\b/.test(responseCorpus(a));
+  return complex ? 12 : 10;
+}
+
 function selectUsefulQuestions(stepIndex, questions) {
   const a = state.answers;
   const coverage = journeyCoverage(a);
-  const limits = [2, 2, 3, 2, 2, 2];
+  const limits = [2, 2, 3, 2, 1, 2];
   const preserved = questions.filter(question =>
     hasText(a[question.id]) ||
     state.currentQuestionId === question.id ||
@@ -638,8 +646,9 @@ function selectUsefulQuestions(stepIndex, questions) {
     .filter(item => item.score >= 0)
     .sort((left, right) => right.score - left.score);
 
-  const remainingGlobal = Math.max(0, 12 - new Set(state.interactionTrail || []).size);
-  const allowance = Math.min(limits[stepIndex], Math.max(0, remainingGlobal));
+  const remainingGlobal = Math.max(0, journeyInteractionLimit(a) - new Set(state.interactionTrail || []).size);
+  const futureReserve = Math.max(0, STEPS.length - stepIndex - 1);
+  const allowance = Math.min(limits[stepIndex], Math.max(0, remainingGlobal - futureReserve));
   const selected = unanswered.slice(0, allowance).map(item => item.question);
   const ids = new Set([...preserved, ...selected].map(question => question.id));
   return questions.filter(question => ids.has(question.id));
@@ -951,13 +960,22 @@ function question(q) {
       </article>`;
   }
 
+  const completionLeads = {
+    belief: "Dans cette situation, je me dis que…",
+    newChoice: "À la place, je choisis de…",
+    action: "Mon premier petit pas sera…",
+    actionSmall: "Pour commencer simplement, je peux…"
+  };
+  const completionLead = completionLeads[q.id] || "";
+
   return `
-    <article class="question-card${cls}">
+    <article class="question-card${cls}${completionLead ? " completion-question" : ""}">
       ${badge}
       <button type="button" class="audio-btn" id="speakQuestionBtn" title="Écouter la question">🔊</button>
       <label for="${q.id}">${escapeHtml(q.label)}</label>
       ${q.hint ? `<p class="question-hint">${q.hint}</p>` : ""}
-      <textarea id="${q.id}" data-id="${q.id}" placeholder="Noter les mots qui viennent…">${escapeHtml(val)}</textarea>
+      ${completionLead ? `<p class="completion-lead">${escapeHtml(completionLead)}</p>` : ""}
+      <textarea id="${q.id}" data-id="${q.id}" placeholder="${completionLead ? "Complétez cette phrase…" : "Noter les mots qui viennent…"}">${escapeHtml(val)}</textarea>
     </article>`;
 }
 
@@ -1587,6 +1605,7 @@ function renderStep() {
     <div class="conversation">
       ${intro}
       ${state.clarificationQuestionId === q.id ? '<p class="question-hint clarification-note">Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?</p>' : ''}
+      <p class="conversation-lead">${conversationLead(q, currentQuestions)}</p>
       <div class="single-question">
         ${question(q)}
         <p class="skip-note">Vous pouvez continuer sans répondre.</p>
