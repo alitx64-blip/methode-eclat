@@ -1259,7 +1259,7 @@ async function setupAISummary(a) {
           configuration: "Gemini n’a pas accepté la configuration envoyée.",
           provider: "Le service Gemini est momentanément indisponible."
         };
-        throw new Error(labels[data.reason] || "Nous n’avons pas pu joindre Gemini.");
+        throw new Error(labels[data.reason] || data.message || "Nous n’avons pas pu joindre Gemini.");
       }
       if (!data.summary) throw new Error("Gemini n’a retourné aucun texte.");
       state.aiSummary = data.summary;
