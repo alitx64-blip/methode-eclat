@@ -1508,7 +1508,7 @@ function conversationLead(q, questions) {
   if (q.id === "partsMovement") return "Les deux élans ont maintenant une place. Cherchons un mouvement qui ne demande pas à l’un d’écraser l’autre.";
   if (q.id === "connectionResonance" || q.id === "connectionNuance") return "ÉCLAT rapproche ici plusieurs de vos réponses. Cette proposition reste entièrement à confirmer, nuancer ou refuser par vous.";
   if (previousAnswer && previous?.adaptive) return `Votre réponse précédente apporte ce repère : « ${escapeHtml(shortAnswer(previousAnswer, 115))} ». Poursuivez seulement avec ce qui vous semble juste.`;
-  return "Prenez votre temps. Une seule question vous est proposée.";
+  return "";
 }
 
 function bind(q) {
@@ -1661,7 +1661,7 @@ function renderStep() {
       ${intro}
       ${renderThread(state.answers)}
       ${state.clarificationQuestionId === q.id ? '<p class="question-hint clarification-note">Je ne suis pas sûre d’avoir bien compris. Pouvez-vous terminer ou préciser cette idée ?</p>' : ''}
-      <p class="conversation-lead">${conversationLead(q, currentQuestions)}</p>
+      ${conversationLead(q, currentQuestions) ? `<p class="conversation-lead">${conversationLead(q, currentQuestions)}</p>` : ""}
       <div class="single-question">
         ${question(q)}
         <p class="skip-note">Vous pouvez continuer sans répondre.</p>
