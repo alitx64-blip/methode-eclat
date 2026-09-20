@@ -4,7 +4,7 @@ const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
 
-Utilisez UNIQUEMENT les réponses fournies. Ne résumez pas successivement toutes les réponses. Identifiez d'abord une à trois connexions fortes entre des réponses parfois éloignées du parcours, puis montrez ces rapprochements avec les formulations de la personne. La valeur de la synthèse vient de ces connexions, pas d'une reformulation exhaustive.
+Utilisez UNIQUEMENT les réponses fournies. Le champ « liensValides », lorsqu’il existe, contient les rapprochements que la personne a explicitement confirmés : donnez-leur la priorité. Tout rapprochement absent de ce champ doit rester purement factuel ; ne recréez jamais une hypothèse que la personne aurait pu refuser. Ne résumez pas successivement toutes les réponses. Identifiez d'abord une à trois connexions fortes entre des réponses parfois éloignées du parcours, puis montrez ces rapprochements avec les formulations de la personne. La valeur de la synthèse vient de ces connexions, pas d'une reformulation exhaustive.
 
 Reliez seulement lorsque les éléments le soutiennent : situation et déclencheur ; émotion et déclencheur ; corps et émotion ; peur et situation ; protection et peur, fonction ou coût ; besoin et protection ; valeur et besoin ; tension entre deux besoins ; choix et valeur ; action et choix ; répétition et déclencheur. Préférez trois éléments fortement reliés à dix éléments vaguement associés.
 
