@@ -1632,3 +1632,63 @@ dialog p:not(.eyebrow) {
     transition: none !important;
   }
 }
+
+
+/* Routage global : les six dimensions restent internes, sans navigation par chapitres. */
+.global-route-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .07);
+}
+
+.global-route-label > span {
+  color: var(--gold-soft);
+  font-size: 18px;
+}
+
+.global-route-label p {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.global-route-label small {
+  color: var(--gold-soft);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.global-route-label strong {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+@media (max-width: 820px) {
+  #stepNav .global-route-label {
+    width: 100%;
+    justify-content: center;
+    padding: 5px 8px;
+    border: 0;
+    background: transparent;
+  }
+
+  #stepNav .global-route-label > span,
+  #stepNav .global-route-label small {
+    display: none;
+  }
+
+  #stepNav .global-route-label strong {
+    color: rgba(255, 255, 255, .82);
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+}
