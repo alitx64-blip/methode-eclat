@@ -1625,7 +1625,7 @@ function renderSummary(complete = false) {
       <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
       ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
       ${complete ? `<p class="anchoring-invitation">Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît, pour comparer votre bilan.</p>` : ""}
-    </section>`
+    </section>`;
   $("#transformationCard").after(conclusionCard);
   setupAISummary(a);
 
