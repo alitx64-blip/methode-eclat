@@ -57,7 +57,14 @@ export async function onRequestPost({ request, env }) {
         }
       })
     });
-    if (!response.ok) return json({ message: "Synthèse indisponible." }, 502);
+    if (!response.ok) {
+      const reason = response.status === 400 ? "configuration"
+        : response.status === 401 || response.status === 403 ? "key"
+        : response.status === 404 ? "model"
+        : response.status === 429 ? "quota"
+        : "provider";
+      return json({ message: "Synthèse indisponible.", reason }, 502);
+    }
     const data = await response.json();
     const summary = data?.candidates?.[0]?.content?.parts
       ?.map((part) => typeof part?.text === "string" ? part.text : "")
