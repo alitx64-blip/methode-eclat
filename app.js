@@ -540,6 +540,111 @@ function personalizedDeepeners(stepIndex) {
   return questions.slice(0, 2);
 }
 
+const QUESTION_FACETS = {
+  situation: ["reason", "difficulty", "personalImpact"],
+  intention: ["intention", "positiveOutcome", "resultMeaning"],
+  intensityStart: ["startIntensity"],
+  emotion: ["emotions", "emotionWords", "emotionMessage"],
+  body: ["body", "bodySignal"],
+  need: ["immediateNeed", "pastNeed", "need", "deepNeed"],
+  trigger: ["triggers", "commonThread", "recurrence"],
+  protection: ["protection"],
+  protectionPurpose: ["protectionPurpose"],
+  protectionCost: ["protectionCost", "heldBack"],
+  belief: ["belief", "beliefAxis", "beliefUsefulness"],
+  connection: ["connectionResonance", "connectionNuance", "partsDialogue", "partsMovement"],
+  resource: ["quality", "choiceResource", "hiddenStrength", "sensitivity", "offering", "selfGift"],
+  choice: ["newChoice", "opposite", "choiceBarrier"],
+  action: ["action", "actionSmall", "actionWhen", "actionAdjustment", "successEvidence"],
+  intensityEnd: ["endIntensity"]
+};
+
+function responseCorpus(a = state.answers) {
+  return normalized(Object.values(a).flatMap(value => Array.isArray(value) ? value : [value]).filter(Boolean).join(" "));
+}
+
+function journeyCoverage(a = state.answers) {
+  const corpus = responseCorpus(a);
+  const direct = (...ids) => ids.some(id => hasText(a[id]));
+  return {
+    situation: direct("reason", "difficulty"),
+    intention: direct("intention", "positiveOutcome", "resultMeaning") || /\b(je (?:veux|voudrais|souhaite|aimerais)|mon objectif|a la place|pouvoir)\b/.test(corpus),
+    intensityStart: Number.isFinite(+a.startIntensity),
+    emotion: direct("emotions", "emotionWords") || /\b(peur|angoiss\w*|anxie\w*|colere|agace\w*|triste\w*|culpab\w*|honte|impuissan\w*|confus\w*|stress\w*)\b/.test(corpus),
+    body: direct("body", "bodySignal", "nowBody") || /\b(ventre|gorge|poitrine|dos|epaules?|tete|jambes?|mains?|corps|tension|boule|noeud|serr\w*|lourd\w*|oppresse\w*)\b/.test(corpus),
+    need: direct("immediateNeed", "pastNeed", "need", "deepNeed") || /\b(j ai besoin|besoin de|il me faut|ce qui compte pour moi)\b/.test(corpus),
+    trigger: direct("triggers") || /\b(quand|lorsque|des que|chaque fois|au moment ou|se declenche|s intensifie)\b/.test(corpus),
+    protection: direct("protection") || /\b(je controle|je fuis|je me tais|je m adapte|je me defends|je me coupe|j evite|je repousse|je procrastine|je verifie)\b/.test(corpus),
+    protectionPurpose: direct("protectionPurpose"),
+    protectionCost: direct("protectionCost", "heldBack") || hasExplicitCost(a),
+    belief: direct("belief"),
+    resource: direct("quality", "choiceResource", "hiddenStrength", "sensitivity", "offering"),
+    choice: direct("newChoice", "opposite"),
+    action: direct("action", "actionSmall"),
+    intensityEnd: Number.isFinite(+a.endIntensity)
+  };
+}
+
+function facetForQuestion(id) {
+  return Object.entries(QUESTION_FACETS).find(([, ids]) => ids.includes(id))?.[0] || "";
+}
+
+function questionUsefulness(question, stepIndex, coverage, a = state.answers) {
+  const id = question.id;
+  const facet = facetForQuestion(id);
+  if (facet && coverage[facet] && !["connection", "protectionPurpose", "protectionCost", "action", "intensityEnd"].includes(facet)) return -1;
+  const scores = {
+    reason: 120, difficulty: 72, intention: 68, startIntensity: 64,
+    emotions: 112, emotionWords: 62, body: 104, bodySignal: 70, immediateNeed: 86,
+    triggers: 108, protection: 106, protectionPurpose: 102, protectionCost: 98, recurrence: 54,
+    irritation: 68, familiar: 35, pastNeed: 44, commonThread: 66,
+    need: 112, deepNeed: 88, partsDialogue: 110, partsMovement: 109,
+    connectionResonance: 118, connectionNuance: 117, belief: 72, value: 64,
+    quality: 108, choiceResource: 104, newChoice: 106, opposite: 72, hiddenStrength: 66,
+    action: 120, actionSmall: 116, endIntensity: 110, takeaway: 76,
+    successEvidence: 68, commitment: 62, nowBody: 50, change: 46
+  };
+  let score = scores[id] ?? (question.personalized ? 60 : 30);
+  if (id === "difficulty" && textValue(a.reason).trim().split(/\s+/).length >= 12) return -1;
+  if (id === "intention" && coverage.intention) return -1;
+  if (id === "body" && !(coverage.emotion || +a.startIntensity >= 7 || /\b(corps|ventre|gorge|poitrine|tension|boule|serr\w*)\b/.test(responseCorpus(a)))) score -= 45;
+  if (id === "immediateNeed" && +a.startIntensity < 7 && !coverage.body) score -= 35;
+  if (id === "recurrence" && !/\b(encore|souvent|toujours|chaque fois|depuis longtemps|se repete|revient)\b/.test(responseCorpus(a))) score -= 35;
+  if (id === "protectionPurpose" && !coverage.protection) return -1;
+  if (id === "protectionCost" && (!coverage.protectionPurpose || coverage.protectionCost)) return -1;
+  if (["partsDialogue", "partsMovement"].includes(id) && !partsConflict(a)) return -1;
+  if (id === "connectionResonance" && !(question.connectionProbe || connectionRestitution(a))) return -1;
+  if (id === "connectionNuance" && !includesAny(a.connectionResonance, ["En partie"])) return -1;
+  if (["quality", "choiceResource"].includes(id) && coverage.resource) return -1;
+  if (id === "newChoice" && coverage.choice) return -1;
+  if (["action", "actionSmall"].includes(id) && coverage.action) return -1;
+  if (id === "successEvidence" && !coverage.action) return -1;
+  return score;
+}
+
+function selectUsefulQuestions(stepIndex, questions) {
+  const a = state.answers;
+  const coverage = journeyCoverage(a);
+  const limits = [2, 2, 3, 2, 2, 2];
+  const preserved = questions.filter(question =>
+    hasText(a[question.id]) ||
+    state.currentQuestionId === question.id ||
+    state.feedbackQuestionId === question.id
+  );
+  const preservedIds = new Set(preserved.map(question => question.id));
+  const unanswered = questions
+    .filter(question => !preservedIds.has(question.id) && !hasText(a[question.id]))
+    .map(question => ({ question, score: questionUsefulness(question, stepIndex, coverage, a) }))
+    .filter(item => item.score >= 0)
+    .sort((left, right) => right.score - left.score);
+
+  const remainingGlobal = Math.max(0, 12 - new Set(state.interactionTrail || []).size);
+  const allowance = Math.min(limits[stepIndex], Math.max(0, remainingGlobal));
+  const selected = unanswered.slice(0, allowance).map(item => item.question);
+  const ids = new Set([...preserved, ...selected].map(question => question.id));
+  return questions.filter(question => ids.has(question.id));
+}
+
 function activeQuestions(stepIndex) {
   const base = STEPS[stepIndex].questions.filter(question =>
     baseQuestionVisible(stepIndex, question) || hasText(state.answers[question.id]) || state.currentQuestionId === question.id || state.feedbackQuestionId === question.id
@@ -593,7 +698,7 @@ function activeQuestions(stepIndex) {
   const result = [];
   const addAfter = id => stableEligible.filter(x => x.after === id && !result.some(r => r.id === x.id)).forEach(x => { result.push(x); addAfter(x.id); });
   base.forEach(q => { result.push(q); addAfter(q.id); });
-  return result;
+  return selectUsefulQuestions(stepIndex, result);
 }
 
 function resolvedQuestionIndex(questions, questionId, fallbackIndex = 0) {
@@ -645,6 +750,10 @@ function freshState() {
     clarificationQuestionId: null,
     feedback: false,
     adaptiveQuestionBank: {},
+    interactionTrail: [],
+    validatedConnectionIds: [],
+    invalidatedConnectionIds: [],
+    pendingConnectionIds: [],
     progressMax: 0,
     name: "",
     answers: {},
@@ -1378,6 +1487,18 @@ function bind(q) {
         let v = c.dataset.value;
         let nextArr = a.includes(v) ? a.filter(z => z !== v) : [...a, v];
         state.answers[q.id] = nextArr;
+        if (q.connectionProbe && q.id === "connectionResonance") {
+          const pending = Array.isArray(state.pendingConnectionIds) ? state.pendingConnectionIds : [];
+          state.validatedConnectionIds ||= [];
+          state.invalidatedConnectionIds ||= [];
+          if (v === "Non, pas vraiment" && nextArr.includes(v)) {
+            state.invalidatedConnectionIds = [...new Set([...state.invalidatedConnectionIds, ...pending])];
+            state.validatedConnectionIds = state.validatedConnectionIds.filter(id => !pending.includes(id));
+          } else if (["Oui, ça me parle", "En partie"].includes(v) && nextArr.includes(v)) {
+            state.validatedConnectionIds = [...new Set([...state.validatedConnectionIds, ...pending])];
+            state.invalidatedConnectionIds = state.invalidatedConnectionIds.filter(id => !pending.includes(id));
+          }
+        }
         c.classList.toggle("selected");
         c.setAttribute("aria-pressed", nextArr.includes(v));
         save();
@@ -1414,7 +1535,21 @@ function renderStep() {
     return;
   }
 
+  if (!currentQuestions.length) {
+    const nextStep = STEPS.findIndex((_, index) => index > state.step && activeQuestions(index).length);
+    if (nextStep >= 0) {
+      state.step = nextStep;
+      state.question = 0;
+      state.currentQuestionId = null;
+      save();
+      return renderStep();
+    }
+    return renderSummary(true);
+  }
+
   const q = currentQuestions[state.question];
+  state.interactionTrail ||= [];
+  if (q?.id && !state.interactionTrail.includes(q.id)) state.interactionTrail.push(q.id);
   
   let total = STEPS.reduce((n, x, idx) => n + activeQuestions(idx).length, 0);
   let done = STEPS.slice(0, state.step).reduce((n, x, idx) => n + activeQuestions(idx).length, 0) + state.question + 1;
@@ -1718,17 +1853,27 @@ function moveForwardFrom(questionId) {
   const currentIndex = resolvedQuestionIndex(currentQuestions, questionId || state.currentQuestionId, state.question);
   state.feedback = false;
   state.feedbackQuestionId = null;
-  if (currentIndex < currentQuestions.length - 1) {
-    selectQuestion(currentQuestions, currentIndex + 1);
-  } else if (state.step < STEPS.length - 1) {
-    state.step++;
-    const nextQuestions = activeQuestions(state.step);
-    selectQuestion(nextQuestions, 0);
-  } else {
-    return renderSummary(true);
+
+  const nextUnanswered = currentQuestions.findIndex((question, index) =>
+    index > currentIndex && !hasText(state.answers[question.id])
+  );
+  if (nextUnanswered >= 0) {
+    selectQuestion(currentQuestions, nextUnanswered);
+    save();
+    return renderStep();
   }
-  save();
-  renderStep();
+
+  for (let stepIndex = state.step + 1; stepIndex < STEPS.length; stepIndex++) {
+    const nextQuestions = activeQuestions(stepIndex);
+    const nextIndex = nextQuestions.findIndex(question => !hasText(state.answers[question.id]));
+    if (nextIndex >= 0) {
+      state.step = stepIndex;
+      selectQuestion(nextQuestions, nextIndex);
+      save();
+      return renderStep();
+    }
+  }
+  return renderSummary(true);
 }
 
 $("#previousBtn").onclick = () => {
