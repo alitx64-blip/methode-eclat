@@ -1,69 +1,76 @@
-// Variante explicitement gratuite. Une surcharge n'est acceptée que si elle reste en :free.
-const DEFAULT_MODEL = "qwen/qwen3.8-27b:free";
-const MAX_BODY_LENGTH = 18000;
-
-const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
-
-Utilisez UNIQUEMENT les réponses fournies. Ne résumez pas successivement toutes les réponses. Identifiez d'abord une à trois connexions fortes entre des réponses parfois éloignées du parcours, puis montrez ces rapprochements avec les formulations de la personne. La valeur de la synthèse vient de ces connexions, pas d'une reformulation exhaustive.
-
-Reliez seulement lorsque les éléments le soutiennent : situation et déclencheur ; émotion et déclencheur ; corps et émotion ; peur et situation ; protection et peur, fonction ou coût ; besoin et protection ; valeur et besoin ; tension entre deux besoins ; choix et valeur ; action et choix ; répétition et déclencheur. Préférez trois éléments fortement reliés à dix éléments vaguement associés.
-
-Rédigez 3 à 5 paragraphes courts, sans titre, sans liste et sans markdown. Réutilisez autant que possible les mots de la personne. Une tension peut être proposée uniquement si les deux côtés apparaissent dans les réponses.
-
-Séparez clairement les faits exprimés, les rapprochements et les hypothèses. Restez prudent : « vos réponses semblent faire apparaître… », « une piste pourrait être… », « il semble y avoir une tension entre… », « si cela résonne pour vous… », « vos propres mots suggèrent… ». N'inventez aucune cause. Si aucune connexion forte n'est soutenue, produisez une synthèse simple et factuelle plutôt qu'une prise de conscience artificielle.
-
-Interdictions absolues : diagnostic psychologique ou psychiatrique ; cause psychologique inventée ; « votre problème vient de » ; « votre inconscient » ; « vous faites cela parce que » ; traumatisme ou souvenir non exprimé ; signification universelle d'une émotion ; culpabilisation ; hypothèse présentée comme une vérité. Si un lien n'est pas suffisamment soutenu, omettez-le. Terminez par le mouvement concret choisi, s'il est renseigné.`;
-
-function json(body, status = 200) {
-  return Response.json(body, { status, headers: { "cache-control": "no-store" } });
-}
-
-export function onRequestGet({ env }) {
-  return json({ enabled: Boolean(env.OPENROUTER_API_KEY) && env.ECLAT_AI_ENABLED !== "false" });
-}
-
-export async function onRequestPost({ request, env }) {
-  if (!env.OPENROUTER_API_KEY || env.ECLAT_AI_ENABLED === "false") return json({ message: "Synthèse indisponible." }, 503);
-  if ((Number(request.headers.get("content-length")) || 0) > MAX_BODY_LENGTH) return json({ message: "Données trop volumineuses." }, 413);
-
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body.responses !== "object" || Array.isArray(body.responses)) return json({ message: "Réponses invalides." }, 400);
-
-  const responses = Object.fromEntries(Object.entries(body.responses)
-    .filter(([key, value]) => key.length <= 60 && (typeof value === "string" || typeof value === "number" || Array.isArray(value)))
-    .map(([key, value]) => [key, Array.isArray(value) ? value.slice(0, 6).map(String).join(" · ").slice(0, 900) : String(value).slice(0, 900)])
-    .filter(([, value]) => value.trim()));
-  const serialized = JSON.stringify(responses);
-  if (serialized.length < 40 || serialized.length > MAX_BODY_LENGTH) return json({ message: "Réponses insuffisantes ou trop volumineuses." }, 400);
-
+export async function onRequestPost(context) {
   try {
-    const requestedModel = String(env.OPENROUTER_MODEL || "").trim();
-    const model = requestedModel.endsWith(":free") ? requestedModel : DEFAULT_MODEL;
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // Récupération du corps de la requête envoyée depuis le client
+    const { reponses, typeExercice } = await context.request.json();
+
+    // Récupération de la clé API OpenAI dans les variables d'environnement Cloudflare
+    const apiKey = context.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "La clé API n'est pas configurée dans Cloudflare." }), 
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Prompt système de maïeutique et d'ancrage
+    const systemPrompt = `Tu es un miroir maïeutique et un facilitateur d'introspection pour le parcours "${typeExercice || 'ÉCLAT'}".
+
+MISSION :
+À partir des réponses brutes saisies par l'utilisateur, rédige un paragraphe d'ancrage continu, fluide et structuré, rédigé à la première personne du singulier ("Je").
+
+CONSIGNES DE RÉDACTION STRICTES :
+1. N'ajoute AUCUN conseil, AUCUNE analyse extérieure, AUCUN jugement ("Vous devriez...", "Il semble que...").
+2. Utilise uniquement la matière transmise par l'utilisateur, mais réordonne-la logiquement selon le fil :
+   - L'épreuve / ce qui pèse aujourd'hui
+   - La sensation corporelle et l'émotion associée
+   - Le besoin ou la croyance identifiée
+   - La ressource, la qualité ou le nouveau choix de positionnement
+3. Le ton doit être sobre, clair, bienveillant et structurant.
+4. Longueur : entre 120 et 180 mots.
+5. Ne mets pas de titre ni de formule d'introduction ("Voici votre synthèse :"). Attaque directement le texte par "Je...".`;
+
+    // Appel vers l'API d'OpenAI
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "content-type": "application/json",
-        "http-referer": new URL(request.url).origin,
-        "x-title": "ÉCLAT"
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model,
+        model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Réponses du parcours ÉCLAT :\n${serialized}` }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: JSON.stringify(reponses) }
         ],
-        provider: { data_collection: "deny", zdr: true },
-        temperature: 0.35,
-        max_tokens: 750
+        temperature: 0.6,
+        max_tokens: 400
       })
     });
-    if (!response.ok) return json({ message: "Synthèse indisponible." }, 502);
-    const data = await response.json();
-    const summary = data?.choices?.[0]?.message?.content?.trim();
-    if (!summary) return json({ message: "Synthèse indisponible." }, 502);
-    return json({ summary, model: data.model || model });
-  } catch {
-    return json({ message: "Synthèse indisponible." }, 502);
+
+    const data = await openaiResponse.json();
+
+    if (!openaiResponse.ok) {
+      console.error("Erreur réponse OpenAI :", data);
+      return new Response(
+        JSON.stringify({ error: "Erreur lors du traitement du texte par l'IA." }), 
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const synthese = data.choices[0]?.message?.content?.trim();
+
+    // Renvoi du résultat éphémère au téléphone
+    return new Response(
+      JSON.stringify({ synthese }), 
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  } catch (err) {
+    console.error("Erreur serveur :", err);
+    return new Response(
+      JSON.stringify({ error: "Erreur interne lors de la génération." }), 
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
