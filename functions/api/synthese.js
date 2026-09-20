@@ -1,5 +1,5 @@
 // Variante explicitement gratuite. Une surcharge n'est acceptée que si elle reste en :free.
-const DEFAULT_MODEL = "qwen/qwen3.8-27b:free";
+const DEFAULT_MODEL = "openrouter/free";
 const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
@@ -38,7 +38,7 @@ export async function onRequestPost({ request, env }) {
 
   try {
     const requestedModel = String(env.OPENROUTER_MODEL || "").trim();
-    const model = requestedModel.endsWith(":free") ? requestedModel : DEFAULT_MODEL;
+    const model = requestedModel === "openrouter/free" || requestedModel.endsWith(":free") ? requestedModel : DEFAULT_MODEL;
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -53,7 +53,7 @@ export async function onRequestPost({ request, env }) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: `Réponses du parcours ÉCLAT :\n${serialized}` }
         ],
-        provider: { data_collection: "deny", zdr: true },
+        provider: { data_collection: "deny", allow_fallbacks: true },
         temperature: 0.35,
         max_tokens: 750
       })
