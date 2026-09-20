@@ -1,5 +1,5 @@
-// Variante explicitement gratuite. Une surcharge n'est acceptée que si elle reste en :free.
-const DEFAULT_MODEL = "openrouter/free";
+// Modèle Gemini disponible dans l’offre gratuite, modifiable avec GEMINI_MODEL.
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const MAX_BODY_LENGTH = 18000;
 
 const SYSTEM_PROMPT = `Vous rédigez la synthèse approfondie d'un parcours ÉCLAT en français.
@@ -19,11 +19,11 @@ function json(body, status = 200) {
 }
 
 export function onRequestGet({ env }) {
-  return json({ enabled: Boolean(env.OPENROUTER_API_KEY) && env.ECLAT_AI_ENABLED !== "false" });
+  return json({ enabled: Boolean(env.GEMINI_API_KEY) && env.ECLAT_AI_ENABLED !== "false" });
 }
 
 export async function onRequestPost({ request, env }) {
-  if (!env.OPENROUTER_API_KEY || env.ECLAT_AI_ENABLED === "false") return json({ message: "Synthèse indisponible." }, 503);
+  if (!env.GEMINI_API_KEY || env.ECLAT_AI_ENABLED === "false") return json({ message: "Synthèse indisponible." }, 503);
   if ((Number(request.headers.get("content-length")) || 0) > MAX_BODY_LENGTH) return json({ message: "Données trop volumineuses." }, 413);
 
   const body = await request.json().catch(() => null);
@@ -37,32 +37,34 @@ export async function onRequestPost({ request, env }) {
   if (serialized.length < 40 || serialized.length > MAX_BODY_LENGTH) return json({ message: "Réponses insuffisantes ou trop volumineuses." }, 400);
 
   try {
-    const requestedModel = String(env.OPENROUTER_MODEL || "").trim();
-    const model = requestedModel === "openrouter/free" || requestedModel.endsWith(":free") ? requestedModel : DEFAULT_MODEL;
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const requestedModel = String(env.GEMINI_MODEL || "").trim();
+    const model = /^gemini-[a-z0-9.-]+$/i.test(requestedModel) ? requestedModel : DEFAULT_MODEL;
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-        "content-type": "application/json",
-        "http-referer": new URL(request.url).origin,
-        "x-title": "ÉCLAT"
+        "x-goog-api-key": env.GEMINI_API_KEY,
+        "content-type": "application/json"
       },
       body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Réponses du parcours ÉCLAT :\n${serialized}` }
-        ],
-        provider: { data_collection: "deny", allow_fallbacks: true },
-        temperature: 0.35,
-        max_tokens: 750
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{
+          role: "user",
+          parts: [{ text: `Réponses du parcours ÉCLAT :\n${serialized}` }]
+        }],
+        generationConfig: {
+          temperature: 0.35,
+          maxOutputTokens: 900
+        }
       })
     });
     if (!response.ok) return json({ message: "Synthèse indisponible." }, 502);
     const data = await response.json();
-    const summary = data?.choices?.[0]?.message?.content?.trim();
+    const summary = data?.candidates?.[0]?.content?.parts
+      ?.map((part) => typeof part?.text === "string" ? part.text : "")
+      .join("")
+      .trim();
     if (!summary) return json({ message: "Synthèse indisponible." }, 502);
-    return json({ summary, model: data.model || model });
+    return json({ summary, model });
   } catch {
     return json({ message: "Synthèse indisponible." }, 502);
   }
