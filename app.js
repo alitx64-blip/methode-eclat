@@ -1157,24 +1157,32 @@ function connectionCandidates(a) {
   return candidates.sort((left, right) => right.score - left.score);
 }
 
-function strongConnections(a) {
-  const rejected = includesAny(a.connectionResonance, ["Non, pas vraiment"]);
-  const candidates = connectionCandidates(a);
-  const withoutDuplicateTension = candidates.some(connection => connection.id === "freedomSecurity")
+function connectionPool(a) {
+  const invalidated = new Set(state.invalidatedConnectionIds || []);
+  const candidates = connectionCandidates(a).filter(connection => !invalidated.has(connection.id));
+  return candidates.some(connection => connection.id === "freedomSecurity")
     ? candidates.filter(connection => connection.id !== "internalTension")
     : candidates;
-  if (rejected) return withoutDuplicateTension.filter(connection => !connection.hypothesis).slice(0, 3);
-  const interpretive = withoutDuplicateTension.filter(connection => connection.score >= 4 && connection.id !== "actionChoice");
-  return interpretive.length ? [...interpretive, ...withoutDuplicateTension.filter(connection => connection.id === "actionChoice")].slice(0, 3) : [];
+}
+
+function strongConnections(a) {
+  const validated = new Set(state.validatedConnectionIds || []);
+  const candidates = connectionPool(a);
+  const factual = candidates.filter(connection => !connection.hypothesis && connection.score >= 4);
+  const confirmedHypotheses = candidates.filter(connection => connection.hypothesis && connection.score >= 5 && validated.has(connection.id));
+  return [...confirmedHypotheses, ...factual]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3);
 }
 
 function connectionRestitution(a) {
-  const candidates = connectionCandidates(a);
-  const connections = (candidates.some(connection => connection.id === "freedomSecurity")
-    ? candidates.filter(connection => connection.id !== "internalTension")
-    : candidates).filter(connection => connection.score >= 5).slice(0, 2);
-  if (connections.length < 2) return "";
-  return `Plusieurs de vos réponses semblent se répondre. ${connections.map(connection => connection.reading).join(" ")} Une piste à vérifier ensemble se dessine, sans en faire une vérité sur vous.`;
+  const validated = new Set(state.validatedConnectionIds || []);
+  const connections = connectionPool(a)
+    .filter(connection => connection.score >= 6 && !validated.has(connection.id))
+    .slice(0, 2);
+  if (!connections.length) return "";
+  state.pendingConnectionIds = connections.map(connection => connection.id);
+  return `Plusieurs de vos réponses semblent se répondre. ${connections.map(connection => connection.reading).join(" ")} Cette piste reste à confirmer par vous.`;
 }
 
 function buildConclusion(a) {
@@ -1314,6 +1322,7 @@ function usefulAnswersForAI(a) {
     peurProfonde: firstMeaningful(a.fearCore, a.fearImplication4, a.fearImplication3, a.fearImplication2, a.fearImplication1),
     dialogueInterieur: a.partsDialogue,
     mouvementRespectantLesDeuxParts: a.partsMovement,
+    liensValides: strongConnections(a).map(connection => connection.reading),
     ressource: firstMeaningful(a.quality, a.sensitivity, a.offering),
     nouveauChoix: firstMeaningful(a.newChoice, a.opposite),
     action: firstMeaningful(a.actionSmall, a.action),
