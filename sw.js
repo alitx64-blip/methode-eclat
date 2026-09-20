@@ -1,9 +1,9 @@
-const CACHE_NAME = 'eclat-cache-v13';
+const CACHE_NAME = 'eclat-cache-v14';
 const ASSETS = [
   './',
   './index.html',
   './styles.css?v=20260920-1',
-  './app.js?v=20260920-1',
+  './app.js?v=20260920-2',
   './favicon.svg',
   './manifest.json'
 ];
