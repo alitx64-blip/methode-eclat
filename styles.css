@@ -1692,3 +1692,7 @@ dialog p:not(.eyebrow) {
     text-transform: uppercase;
   }
 }
+
+
+/* L’accueil présente désormais un fil unique, sans annoncer de chapitres. */
+.welcome { grid-template-columns: minmax(0, 760px); justify-content: center; }
