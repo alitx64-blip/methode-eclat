@@ -1250,9 +1250,18 @@ async function setupAISummary(a) {
         headers: { "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify({ responses: usefulAnswersForAI(a) })
       });
-      if (!response.ok) throw new Error("unavailable");
-      const data = await response.json();
-      if (!data.summary) throw new Error("empty");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const labels = {
+          key: "La clé Gemini a été refusée.",
+          quota: "La limite gratuite Gemini est momentanément atteinte.",
+          model: "Le modèle Gemini configuré n’est pas disponible.",
+          configuration: "Gemini n’a pas accepté la configuration envoyée.",
+          provider: "Le service Gemini est momentanément indisponible."
+        };
+        throw new Error(labels[data.reason] || "Nous n’avons pas pu joindre Gemini.");
+      }
+      if (!data.summary) throw new Error("Gemini n’a retourné aucun texte.");
       state.aiSummary = data.summary;
       state.aiSummaryCreatedAt = new Date().toISOString();
       const archived = history.find(item => item.id === state.id);
@@ -1264,8 +1273,9 @@ async function setupAISummary(a) {
       save();
       showSummary(data.summary);
       return;
-    } catch {
-      result.innerHTML = `<p class="ai-summary-error">Nous n’avons pas pu générer la synthèse approfondie. Votre synthèse ÉCLAT reste disponible ci-dessus.</p>`;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Nous n’avons pas pu joindre Gemini.";
+      result.innerHTML = `<p class="ai-summary-error">${escapeHtml(detail)} Votre synthèse ÉCLAT reste disponible ci-dessus.</p>`;
     }
     result.hidden = false;
     button.disabled = false;
