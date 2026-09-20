@@ -1322,3 +1322,23 @@ dialog p:not(.eyebrow) {
   .mirror-grid { grid-template-columns: 1fr; }
   .conclusion-block { padding: 19px 17px; }
 }
+
+
+/* Raccords courts et phrases à compléter du parcours adaptatif */
+.conversation-lead {
+  max-width: 680px;
+  margin: 0 0 13px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.completion-lead {
+  margin: 14px 0 8px;
+  color: var(--blue);
+  font-family: Italiana, serif;
+  font-size: clamp(20px, 3vw, 25px);
+  line-height: 1.35;
+}
+
+.completion-question textarea { min-height: 110px; }
