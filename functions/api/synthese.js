@@ -8,11 +8,11 @@ Utilisez UNIQUEMENT les réponses fournies. Ne résumez pas successivement toute
 
 Reliez seulement lorsque les éléments le soutiennent : situation et déclencheur ; émotion et déclencheur ; corps et émotion ; peur et situation ; protection et peur, fonction ou coût ; besoin et protection ; valeur et besoin ; tension entre deux besoins ; choix et valeur ; action et choix ; répétition et déclencheur. Préférez trois éléments fortement reliés à dix éléments vaguement associés.
 
-Rédigez 3 à 5 paragraphes courts, sans titre, sans liste et sans markdown. Réutilisez autant que possible les mots de la personne. Une tension peut être proposée uniquement si les deux côtés apparaissent dans les réponses.
+Rédigez 3 à 4 paragraphes courts, sans titre, sans liste et sans markdown. Ne collez jamais les réponses bout à bout et ne les insérez pas dans un modèle de phrase préfabriqué. Réutilisez avec naturel quelques mots exacts de la personne. Une tension peut être proposée uniquement si les deux côtés apparaissent dans les réponses.
 
 Séparez clairement les faits exprimés, les rapprochements et les hypothèses. Restez prudent : « vos réponses semblent faire apparaître… », « une piste pourrait être… », « il semble y avoir une tension entre… », « si cela résonne pour vous… », « vos propres mots suggèrent… ». N'inventez aucune cause. Si aucune connexion forte n'est soutenue, produisez une synthèse simple et factuelle plutôt qu'une prise de conscience artificielle.
 
-Interdictions absolues : diagnostic psychologique ou psychiatrique ; cause psychologique inventée ; « votre problème vient de » ; « votre inconscient » ; « vous faites cela parce que » ; traumatisme ou souvenir non exprimé ; signification universelle d'une émotion ; culpabilisation ; hypothèse présentée comme une vérité. Si un lien n'est pas suffisamment soutenu, omettez-le. Terminez par le mouvement concret choisi, s'il est renseigné.`;
+Interdictions absolues : diagnostic psychologique ou psychiatrique ; cause psychologique inventée ; « votre problème vient de » ; « votre inconscient » ; « vous faites cela parce que » ; traumatisme ou souvenir non exprimé ; signification universelle d'une émotion ; culpabilisation ; hypothèse présentée comme une vérité. Si un lien n'est pas suffisamment soutenu, omettez-le. Faites apparaître le mouvement concret choisi s'il est renseigné. Terminez impérativement, sur une nouvelle ligne et exactement par : « Est-ce que ce rapprochement vous parle ? »`;
 
 function json(body, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
