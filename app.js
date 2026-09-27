@@ -1504,7 +1504,7 @@ async function setupAISummary(a) {
   if (!panel || !button || !result || severeDistressDetected(a)) return;
 
   const showSummary = summary => {
-    result.innerHTML = `<h3>Lecture approfondie</h3><div class="ai-summary-text">${summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
+    result.innerHTML = `<h3>Un lien à regarder</h3><div class="ai-summary-text">${summary.split(/\n\s*\n/).filter(Boolean).map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join("")}</div><p class="ai-summary-note">Cette synthèse est générée à partir de vos réponses. Elle propose des pistes de réflexion et ne constitue pas un diagnostic.</p>`;
     result.hidden = false;
     button.hidden = true;
   };
@@ -1558,7 +1558,7 @@ async function setupAISummary(a) {
     }
     result.hidden = false;
     button.disabled = false;
-    button.textContent = "✨ Générer une synthèse approfondie";
+    button.textContent = "Approfondir cette lecture";
   };
 }
 
