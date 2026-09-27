@@ -103,7 +103,7 @@ const DEEPENERS = {
     { id: "choiceResource", after: "choiceBarrier", label: "Sur quelle ressource en vous pourrez-vous alors vous appuyer ?", when: a => hasText(a.choiceBarrier) }
   ],
   5: [
-    { id: "actionSmall", after: "action", label: "Comment rendre cette action assez petite et simple pour qu’elle soit réellement faisable ?", when: a => hasText(a.action) },
+    { id: "actionSmall", after: "action", label: "Concrètement, la prochaine fois que cette situation se présente, qu’allez-vous faire, dire ou décider qui montrera ce changement ?", hint: "Cherchez quelque chose d’observable : une phrase, un geste, une décision ou une action.", when: a => hasText(a.action) && !isConcreteAction(a.action) },
     { id: "actionWhen", after: "actionSmall", label: "Quand précisément souhaitez-vous faire ce premier pas ?", when: a => hasText(a.actionSmall) },
     { id: "actionAdjustment", after: "commitment", label: "Qu’est-ce qui rendrait cette action plus simple ou plus juste pour vous ?", when: a => a.commitment !== undefined && Number.isFinite(+a.commitment) && +a.commitment < 7 },
     { id: "support", after: "afterNeed", label: "De quel soutien ou de quelle ressource disposez-vous déjà pour la suite ?", when: a => hasText(a.afterNeed) }
@@ -546,7 +546,7 @@ function journeyCoverage(a = state.answers) {
     belief: direct("belief"),
     resource: direct("quality", "choiceResource", "hiddenStrength", "sensitivity", "offering"),
     choice: direct("newChoice", "opposite"),
-    action: direct("action", "actionSmall"),
+    action: [a.actionSmall, a.action].some(isConcreteAction),
     intensityEnd: Number.isFinite(+a.endIntensity)
   };
 }
@@ -583,7 +583,7 @@ function questionUsefulness(question, stepIndex, coverage, a = state.answers) {
   if (id === "connectionNuance" && !includesAny(a.connectionResonance, ["En partie"])) return -1;
   if (["quality", "choiceResource"].includes(id) && coverage.resource) return -1;
   if (id === "newChoice" && coverage.choice) return -1;
-  if (["action", "actionSmall"].includes(id) && coverage.action) return -1;
+  if (id === "action" && hasText(a.action)) return -1;\n  if (id === "actionSmall" && coverage.action) return -1;
   if (id === "successEvidence" && !coverage.action) return -1;
   return score;
 }
@@ -1136,6 +1136,27 @@ function firstMeaningful(...values) {
   return values
     .map(value => textValue(value).replace(/\s+/g, " ").trim())
     .find(value => value.length >= 3 && !isVagueAnswer(value) && !isIncompleteAnswer(value)) || "";
+}
+
+function isConcreteAction(value) {
+  const clean = normalized(value).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  if (!clean || isVagueAnswer(value)) return false;
+  if (clean.split(" ").length <= 3 && /^(etre|d etre|rester|ressentir|avoir|retrouver|garder|vivre)\b/.test(clean)) return false;
+  return /\b(appeler|ecrire|envoyer|demander|dire|parler|prendre|faire|aller|noter|refuser|accepter|ouvrir|fermer|ranger|nettoyer|marcher|sortir|planifier|reserver|annuler|contacter|lire|poser|choisir|decider|commencer|terminer|arreter|mettre|retirer|deplacer|acheter|vendre|payer|verifier)\b/.test(clean) || clean.split(" ").length >= 6;
+}
+
+function synthesisTension(a) {
+  const opening = firstMeaningful(a.reason, a.difficulty);
+  const trigger = firstMeaningful(a.triggers);
+  const protection = firstMeaningful(a.protection);
+  const purpose = firstMeaningful(a.protectionPurpose);
+  const cost = firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a));
+  const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
+  const validated = strongConnections(a)[0];
+  if (validated?.reading) return validated.reading;
+  if (protection && cost && choice) return "Vous dites « " + shortAnswer(protection, 80) + " » pour " + (purpose ? embeddedAnswer(purpose, 95) : "vous protéger") + ", mais vous observez que cela vous coûte « " + shortAnswer(cost, 100) + " ». En même temps, la direction que vous choisissez est « " + shortAnswer(choice, 95) + " ». Ces réponses semblent former une tension à regarder ensemble.";
+  if (opening && trigger && choice) return "Vous partez de « " + shortAnswer(opening, 95) + " », et la situation devient particulièrement sensible quand « " + shortAnswer(trigger, 95) + " ». Pourtant, la direction que vous retenez est « " + shortAnswer(choice, 95) + " ». Le lien entre ces éléments mérite d’être regardé plutôt que de les traiter séparément.";
+  return "";
 }
 
 function embeddedAnswer(value, max = 150) {
