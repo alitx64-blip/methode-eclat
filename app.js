@@ -421,51 +421,17 @@ function personalizedDeepeners(stepIndex) {
 
     const fearIsCentral = includesAny(state.answers.emotions, ["Peur", "Anxiété / angoisse"]) || leadingSignal()?.id === "fear";
     if (fearIsCentral && hasText(state.answers.fearScenario)) {
-      const fearQuestions = [];
-      fearQuestions.push({
+      const fearQuestions = [{
         id: "fearImplication1",
         after: "fearScenario",
-        label: "Si cela arrivait, qu’est-ce que cela impliquerait pour vous ?",
-        hint: "Vous pouvez laisser cette question sans réponse pour arrêter l’approfondissement.",
+        label: "Si cela arrivait, qu’est-ce que cela toucherait de vraiment important pour vous ?",
+        hint: "Une seule réponse suffit. Il n’est pas nécessaire de creuser davantage.",
         type: "text", adaptive: true, personalized: true, fearProbe: true
-      });
-      const implication1CanDeepen = canDeepenFear(state.answers.fearImplication1, 1) && !relationshipContext() && Number.isFinite(+state.answers.startIntensity) && +state.answers.startIntensity >= 7;
-      if (implication1CanDeepen) fearQuestions.push({
-        id: "fearImplication2", after: "fearImplication1",
-        label: "Et si cette conséquence se produisait, qu’est-ce que cela impliquerait pour vous ?",
-        hint: "Continuez seulement si cette question vous paraît utile ; vous pouvez vous arrêter.",
-        type: "text", adaptive: true, personalized: true, fearProbe: true
-      });
-      if (hasText(state.answers.fearImplication2)) fearQuestions.push({
-        id: "fearDepthChoice", after: "fearImplication2",
-        label: "Souhaitez-vous continuer à approfondir cette peur ?",
-        type: "chips", options: ["Oui, continuer", "Non, aller à l’essentiel"],
-        adaptive: true, personalized: true, fearProbe: true
-      });
-      const continueFear = includesAny(state.answers.fearDepthChoice, ["Oui, continuer"]);
-      if (continueFear) fearQuestions.push({
-        id: "fearImplication3", after: "fearDepthChoice",
-        label: "Si vous suivez encore cette conséquence, qu’est-ce qu’elle impliquerait pour vous ?",
-        hint: "Vous pouvez vous arrêter dès que l’enjeu vous paraît suffisamment clair.",
-        type: "text", adaptive: true, personalized: true, fearProbe: true
-      });
-      const implication3 = normalized(state.answers.fearImplication3);
-      const implication3StillGeneral = implication3.split(/\s+/).filter(Boolean).length < 10 || /\b(mal|peur|echec|probleme|difficile)\b/.test(implication3);
-      if (continueFear && hasText(state.answers.fearImplication3) && implication3StillGeneral) fearQuestions.push({
-        id: "fearImplication4", after: "fearImplication3",
-        label: "Qu’est-ce que cette conséquence toucherait de particulièrement important pour vous ?",
-        hint: "Dernier niveau facultatif avant d’aller à l’essentiel.",
-        type: "text", adaptive: true, personalized: true, fearProbe: true
-      });
-      const fearEndId = !implication1CanDeepen
-        ? "fearImplication1"
-        : continueFear
-          ? (fearQuestions.some(q => q.id === "fearImplication4") ? "fearImplication4" : "fearImplication3")
-          : "fearDepthChoice";
-      if (hasText(state.answers[fearEndId]) || includesAny(state.answers.fearDepthChoice, ["Non, aller à l’essentiel"])) fearQuestions.push({
+      }];
+      if (hasText(state.answers.fearImplication1)) fearQuestions.push({
         id: "fearCore",
-        after: fearEndId,
-        label: "En regardant ce chemin, quel semble être l’enjeu le plus profond pour vous ?",
+        after: "fearImplication1",
+        label: "À partir de ce que vous venez d’écrire, quel est l’enjeu essentiel que vous retenez ?",
         type: "text", adaptive: true, personalized: true, fearProbe: true
       });
       questions.push(...fearQuestions);
@@ -623,11 +589,11 @@ function questionUsefulness(question, stepIndex, coverage, a = state.answers) {
 }
 
 function journeyInteractionLimit(a = state.answers) {
-  if (simpleCase(a)) return 8;
+  if (simpleCase(a)) return 7;
   const complex = +a.startIntensity >= 8 || partsConflict(a) || relationshipContext(a) ||
     includesAny(a.recurrence, ["Cela revient souvent"]) ||
     /\b(depuis longtemps|toujours|plusieurs annees|tres intense|submerge\w*)\b/.test(responseCorpus(a));
-  return complex ? 12 : 10;
+  return complex ? 10 : 9;
 }
 
 function stageQuestionCandidates(stepIndex) {
@@ -761,6 +727,17 @@ function synthesisMaterialIsEnough(a = state.answers) {
   return coverage.situation && understanding >= 2 && direction && coverage.action && connectionHasBeenTested(a);
 }
 
+function readyForConnection(a = state.answers) {
+  const coverage = journeyCoverage(a);
+  const understanding = [coverage.emotion, coverage.trigger, coverage.protection, coverage.need].filter(Boolean).length;
+  return coverage.situation && understanding >= 3 && Boolean(connectionRestitution(a));
+}
+
+function directionHasStarted(a = state.answers) {
+  const coverage = journeyCoverage(a);
+  return coverage.resource || coverage.choice || coverage.action;
+}
+
 function routingScore(question, lastQuestionId = null) {
   const a = state.answers;
   const coverage = journeyCoverage(a);
@@ -784,7 +761,12 @@ function routingScore(question, lastQuestionId = null) {
   if (["familiar", "pastNeed", "beliefOrigin"].includes(id) &&
       !/\b(encore|souvent|toujours|chaque fois|depuis longtemps|se repete|revient|familier|souvenir)\b/.test(responseCorpus(a))) return -1;
   if (id === "connectionResonance" && !connectionRestitution(a)) return -1;
-  if (id === "connectionResonance" && connectionRestitution(a)) score += 140;
+  if (id === "connectionResonance" && connectionRestitution(a)) score += readyForConnection(a) ? 320 : 140;
+  if (readyForConnection(a) && !["connectionResonance", "connectionNuance"].includes(id) && !directionHasStarted(a)) score -= 170;
+  if ((state.validatedConnectionIds || []).length > 0 || includesAny(a.connectionResonance, ["Oui, ça me parle", "En partie", "Non, pas vraiment"])) {
+    if (["quality", "choiceResource", "newChoice"].includes(id)) score += 150;
+    if (["belief", "value", "deepNeed", "recurrence", "familiar", "pastNeed", "irritation"].includes(id)) score -= 180;
+  }
   if (id === "partsDialogue" && partsConflict(a)) score += 155;
   if (id === "connectionNuance" && !includesAny(a.connectionResonance, ["En partie"])) return -1;
   if (["quality", "choiceResource"].includes(id) && !(coverage.need || coverage.protection || coverage.belief || coverage.intention)) return -1;
@@ -820,9 +802,9 @@ function nextGlobalQuestion(lastQuestionId = null) {
 
   if (trail.length >= limit) {
     const coverage = journeyCoverage(a);
-    if (!coverage.action && trail.length < 12) {
+    if (!coverage.action && trail.length < 10) {
       candidates = candidates.filter(item => ["quality", "choiceResource", "newChoice", "action", "actionSmall"].includes(item.question.id));
-    } else if (!coverage.intensityEnd && coverage.action && trail.length < 12) {
+    } else if (!coverage.intensityEnd && coverage.action && trail.length < 10) {
       candidates = candidates.filter(item => item.question.id === "endIntensity");
     } else {
       return null;
