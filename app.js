@@ -1823,140 +1823,104 @@ function renderSummary(complete = false) {
     state.conclusion = conclusion;
     archiveCompletedSession();
   }
-  const themes = Array.isArray(a.themes) ? a.themes.join(" · ") : a.themes;
-  const source = a.coreWord || themes || "À préciser";
-  const passage = a.opposite || a.need || "À faire émerger";
-  const treasure = a.quality || a.sensitivity || "À reconnaître";
-  
-  const hasIntensity = a.startIntensity !== undefined && a.endIntensity !== undefined;
-  const intensityBadge = hasIntensity ? `<div class="intensity-badge">Intensité ressentie : ${a.startIntensity}/10 → ${a.endIntensity}/10</div>` : "";
 
-  const userNeed = a.need || a.immediateNeed || "mon besoin profond";
-  const userQuality = a.quality || a.sensitivity || "mes ressources";
-  const mantraText = `« Aujourd'hui, je choisis d'honorer ce besoin : <strong>${escapeHtml(userNeed)}</strong>, en m'appuyant sur cette ressource : <strong>${escapeHtml(userQuality)}</strong>. »`;
-
-  const signals = supportedSignals(a).slice(0, 3);
-  const signal = signals[0] || null;
+  const opening = firstMeaningful(a.reason, a.difficulty);
+  const emotion = firstMeaningful(a.emotionWords, a.emotions);
+  const trigger = firstMeaningful(a.triggers);
+  const protection = firstMeaningful(a.protection);
+  const purpose = firstMeaningful(a.protectionPurpose);
+  const cost = firstMeaningful(a.protectionCost, a.heldBack, extractExplicitCost(a));
+  const need = firstMeaningful(a.need, a.deepNeed, a.immediateNeed, a.pastNeed);
+  const resource = firstMeaningful(a.quality, a.choiceResource, a.sensitivity, a.offering);
+  const choice = firstMeaningful(a.newChoice, a.opposite, a.positiveOutcome, a.intention);
+  const action = firstMeaningful(a.actionSmall, a.action);
   const previous = [...history]
     .filter(item => item.id !== state.id)
     .sort((left, right) => new Date(right.completedAt) - new Date(left.completedAt))[0];
-  const openingWords = shortAnswer(a.reason || a.difficulty);
-  const changeWords = shortAnswer(a.change || a.takeaway);
-  const personalReading = signal ? `
-    <div class="insight personal-reading">
-      <small>Le fil repéré dans vos propres mots</small>
-      <p>Votre parcours semble surtout traversé par <strong>${escapeHtml(signal.name)}</strong>. Cette lecture reste une proposition à ressentir, pas une étiquette.</p>
-      ${openingWords ? `<p><b>Au départ :</b> « ${escapeHtml(openingWords)} »</p>` : ""}
-      ${changeWords ? `<p><b>Ce qui se dégage maintenant :</b> « ${escapeHtml(changeWords)} »</p>` : ""}
-      <p><b>La direction possible :</b> ${escapeHtml(signal.resource)}.</p>
-    </div>` : "";
 
-  const detectedThemes = signals.length ? `
-    <div class="detected-themes" aria-label="Thèmes repérés">
-      ${signals.map(item => `<span>${escapeHtml(item.name)}</span>`).join("")}
-    </div>` : "";
+  const hasIntensity = Number.isFinite(+a.startIntensity) && Number.isFinite(+a.endIntensity);
+  const factualParts = [
+    opening ? `Vous partez de « ${shortAnswer(opening, 150)} ».` : "",
+    emotion ? `Dans cette situation, vous nommez « ${shortAnswer(emotion, 100)} »${trigger ? `, notamment quand « ${shortAnswer(trigger, 115)} »` : ""}.` : "",
+    protection ? `Votre réflexe est « ${shortAnswer(protection, 100)} »${purpose ? `, avec cette fonction que vous avez vous-même identifiée : « ${shortAnswer(purpose, 125)} »` : ""}.` : "",
+    cost ? `Vous observez aussi que cette manière de faire a cette conséquence : « ${shortAnswer(cost, 135)} ».` : ""
+  ].filter(Boolean);
 
-  const comparison = previous ? `
-    <div class="evolution-comparison">
-      <small>Depuis votre parcours du ${formatDate(previous.completedAt)}</small>
-      <div class="comparison-grid">
-        <div><span>Thème précédent</span><strong>${escapeHtml(sessionTheme(previous))}</strong></div>
-        <div><span>Thème actuel</span><strong>${escapeHtml(signal ? signal.name : (a.coreWord || "À préciser"))}</strong></div>
-      </div>
-      ${previous.conclusion?.point ? `<p><b>Votre précédent point ÉCLAT :</b> « ${escapeHtml(shortAnswer(previous.conclusion.point, 170))} »</p>` : ""}
-      <p>${previous.actionCompletedAt ? "Vous aviez réalisé le petit pas choisi." : "Votre ancien petit pas peut encore être repris, ajusté ou laissé de côté si votre besoin a changé."}</p>
-    </div>` : `
-    <div class="evolution-comparison first">
-      <small>Votre point de départ</small>
-      <p>Ce bilan devient votre premier repère. Lors d’un prochain parcours, ÉCLAT pourra mettre en lumière ce qui a changé.</p>
-    </div>`;
+  const directionParts = [
+    need ? `Le besoin qui se dégage est « ${shortAnswer(need, 115)} ».` : "",
+    resource ? `La ressource que vous retenez est « ${shortAnswer(resource, 115)} ».` : "",
+    choice ? `Le choix que vous souhaitez essayer maintenant est « ${shortAnswer(choice, 125)} ».` : "",
+    action ? `Vous lui donnez une forme concrète avec : « ${shortAnswer(action, 130)} ».` : ""
+  ].filter(Boolean);
 
-  const currentTheme = signal ? signal.name : (a.coreWord || "un thème à préciser");
-  const recurrenceCount = history.filter(item => item.id !== state.id && sessionTheme(item) === currentTheme).length;
-  const recurringTheme = recurrenceCount > 0 ? `
-    <div class="recurring-theme">
-      <small>Un fil qui revient dans votre histoire</small>
-      <p>Le thème <strong>${escapeHtml(currentTheme)}</strong> apparaît dans ${recurrenceCount + 1} parcours. Cela ne prouve pas une cause unique, mais peut indiquer un point utile à observer dans des situations différentes.</p>
-    </div>` : "";
+  const connection = strongConnections(a)[0];
+  const linkText = connection
+    ? connection.reading
+    : protection && (resource || choice)
+      ? `Votre parcours fait apparaître un passage entre une façon de vous protéger — « ${shortAnswer(protection, 85)} » — et une autre manière d’avancer que vous avez vous-même choisie.`
+      : "";
 
   $("#transformationCard").innerHTML = `
-    <h2>Le fil essentiel de la séance</h2>
-    ${intensityBadge}
-    ${detectedThemes}
-    <div class="transformation-flow">
-      <div class="transformation-node"><small>Ce qui pèse</small><strong>${escapeHtml(source)}</strong></div>
-      <div class="flow-arrow">→</div>
-      <div class="transformation-node"><small>Ce qui est recherché</small><strong>${escapeHtml(passage)}</strong></div>
-      <div class="flow-arrow">→</div>
-      <div class="transformation-node"><small>La ressource</small><strong>${escapeHtml(treasure)}</strong></div>
+    <div class="simple-summary-head">
+      <p class="eyebrow">Votre synthèse ÉCLAT</p>
+      <h2>Ce que votre parcours fait apparaître</h2>
+      <p class="summary-intro">L’essentiel de vos réponses, sans ajouter d’histoire à votre place.</p>
+      ${hasIntensity ? `<div class="intensity-badge">Intensité ressentie : ${a.startIntensity}/10 → ${a.endIntensity}/10</div>` : ""}
     </div>
-    <div class="insight">
-      <p style="margin: 0 0 10px 0; font-size: 1.05rem;"><strong>Votre phrase d'ancrage :</strong><br>${mantraText}</p>
-      ${a.action ? `<p><b>Premier mouvement choisi :</b> ${escapeHtml(a.action)}</p>` : ""}
-      ${a.successEvidence ? `<p><b>Le signe qui permettra de reconnaître le changement :</b> ${escapeHtml(a.successEvidence)}</p>` : ""}
-      ${a.commitment !== undefined ? `<p><b>Engagement ressenti :</b> ${escapeHtml(a.commitment)} / 10${+a.commitment < 7 ? " — l’action mérite d’être simplifiée ou ajustée." : ""}</p>` : ""}
+
+    <div class="summary-path">
+      <section class="path-card">
+        <small>01 · Ce que vous vivez</small>
+        ${factualParts.length ? factualParts.map(text => `<p>${escapeHtml(text)}</p>`).join("") : "<p>Votre situation demande encore à être précisée avec vos propres mots.</p>"}
+      </section>
+
+      ${linkText ? `<section class="path-card path-link"><small>02 · Le lien que vous avez fait émerger</small><p>${escapeHtml(linkText)}</p></section>` : ""}
+
+      <section class="path-card path-direction">
+        <small>${linkText ? "03" : "02"} · Ce que vous choisissez maintenant</small>
+        ${directionParts.length ? directionParts.map(text => `<p>${escapeHtml(text)}</p>`).join("") : "<p>Aucun nouveau choix n’a encore été formulé. Il n’est pas nécessaire d’en inventer un.</p>"}
+      </section>
+
+      <section class="path-card path-anchor">
+        <small>Votre point ÉCLAT</small>
+        <blockquote>« ${escapeHtml(conclusion.point)} »</blockquote>
+        ${action ? `<div class="conclusion-action"><small>Premier mouvement concret</small><p>${escapeHtml(action)}</p></div>` : ""}
+      </section>
     </div>
-    ${personalReading}
-    ${recurringTheme}
-    ${comparison}
-    ${complete ? `<div class="return-invitation"><strong>Votre prochain rendez-vous avec vous-même</strong><p>Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît. Votre nouveau bilan sera comparé à celui-ci.</p></div>` : ""}`;
+
+    <div class="ai-summary-panel" id="aiSummaryPanel" hidden>
+      <button class="secondary" id="generateAISummary" type="button">Approfondir cette lecture</button>
+      <p class="ai-summary-note">Facultatif : l’IA cherchera au maximum un ou deux liens supplémentaires à partir de vos réponses, sans inventer de cause.</p>
+      <div class="ai-summary-result" id="aiSummaryResult" aria-live="polite" hidden></div>
+    </div>
+
+    ${previous ? `<details class="previous-summary"><summary>Comparer avec mon parcours précédent</summary>
+      <p><small>${formatDate(previous.completedAt)}</small></p>
+      ${previous.conclusion?.point ? `<p><b>Point ÉCLAT précédent :</b> « ${escapeHtml(shortAnswer(previous.conclusion.point, 170))} »</p>` : ""}
+      ${previous.answers?.action ? `<p><b>Action choisie :</b> ${escapeHtml(shortAnswer(previous.answers.action, 140))}</p>` : ""}
+    </details>` : ""}
+
+    ${complete ? `<p class="return-invitation"><strong>Votre prochain rendez-vous avec vous-même</strong><br>Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît.</p>` : ""}
+  `;
 
   $(".eclat-conclusion")?.remove();
-  const conclusionCard = document.createElement("section");
-  conclusionCard.className = "eclat-conclusion";
-  conclusionCard.innerHTML = `
-    <div class="conclusion-title">
-      <div><p class="eyebrow">Votre bilan</p><h2>Synthèse ÉCLAT</h2></div>
-      <span>${conclusion.insufficient ? "Lecture en attente de précisions" : `Lecture fondée sur ${conclusion.evidenceCount || "plusieurs"} repères`}</span>
-    </div>
-
-    <section class="conclusion-block mirror-card" aria-labelledby="mirrorTitle">
-      <p class="conclusion-step">01 · Le miroir factuel</p>
-      <h3 id="mirrorTitle">Ce que vous avez déposé</h3>
-      ${renderMirror(a)}
-    </section>
-
-    <section class="conclusion-block reading-card" aria-labelledby="readingTitle">
-      <p class="conclusion-step">02 · La lecture ÉCLAT</p>
-      <h3 id="readingTitle">Ce que vos réponses semblent relier</h3>
-      <div class="conclusion-reading">
-        ${(conclusion.narrative?.length ? conclusion.narrative : [conclusion.observation, conclusion.mechanism, conclusion.implication, conclusion.emotion, conclusion.body, conclusion.belief, conclusion.projection, conclusion.shadow, conclusion.rhythm]).filter(Boolean).map(text => `<p>${escapeHtml(text)}</p>`).join("")}
-      </div>
-      ${conclusion.followUps?.length ? `<div class="conclusion-followups"><h4>Pour construire une conclusion plus juste</h4><ol>${conclusion.followUps.map(question => `<li>${escapeHtml(question)}</li>`).join("")}</ol></div>` : ""}
-      ${!conclusion.insufficient ? `<div class="awareness-point"><small>La prise de conscience proposée</small><strong>${escapeHtml(conclusion.awareness)}</strong></div>` : ""}
-      <p class="conclusion-source">${conclusion.insufficient ? "ÉCLAT préfère suspendre sa lecture plutôt que compléter vos réponses à votre place." : "Cette lecture croise uniquement les éléments formulés dans vos réponses."} Elle ne constitue ni un diagnostic ni une vérité définitive sur vous.</p>
-      <div class="ai-summary-panel" id="aiSummaryPanel" hidden>
-        <button class="primary" id="generateAISummary" type="button">✨ Générer une synthèse approfondie</button>
-        <p class="ai-summary-note">Un seul appel facultatif sera effectué. Votre synthèse ÉCLAT reste disponible quoi qu’il arrive.</p>
-        <div class="ai-summary-result" id="aiSummaryResult" aria-live="polite" hidden></div>
-      </div>
-    </section>
-
-    <section class="conclusion-block anchoring-card" aria-labelledby="anchoringTitle">
-      <p class="conclusion-step">03 · L’ouverture concrète</p>
-      <h3 id="anchoringTitle">Votre point d’ancrage</h3>
-      <div class="eclat-point"><small>Votre point ÉCLAT</small><blockquote>« ${escapeHtml(conclusion.point)} »</blockquote></div>
-      ${conclusion.action ? `<div class="conclusion-action"><small>Pour l’incarner dans la réalité</small><p>${escapeHtml(conclusion.action)}</p></div>` : ""}
-      ${complete ? `<p class="anchoring-invitation">Revenez dans environ 7 jours, ou lorsqu’un changement concret apparaît, pour comparer votre bilan.</p>` : ""}
-    </section>`;
-  $("#transformationCard").after(conclusionCard);
   setupAISummary(a);
 
-  $("#summaryContent").innerHTML = STEPS.map((s, i) => `
-    <article class="summary-card">
-      <h3>${s.title}</h3>
-      ${activeQuestions(i).filter(q => hasText(a[q.id])).map(q => {
-        let v = a[q.id];
-        if (Array.isArray(v)) v = v.join(" · ");
-        const empty = v === undefined || v === "";
-        return `
-          <div class="summary-item ${q.adaptive ? 'summary-adaptive' : ''}">
-            <b>${q.label}</b>
-            <p class="${empty ? 'empty-answer' : ''}">${empty ? 'Non renseigné' : escapeHtml(v) + (q.type === 'scale' ? ' / 10' : '')}</p>
-          </div>`;
-      }).join("")}
-    </article>
-  `).join("");
+  $("#summaryContent").innerHTML = `
+    <details class="answers-details">
+      <summary>Relire toutes mes réponses</summary>
+      <div class="summary-grid-inner">
+        ${STEPS.map((s, i) => `
+          <article class="summary-card">
+            <h3>${s.title}</h3>
+            ${activeQuestions(i).filter(q => hasText(a[q.id])).map(q => {
+              let v = a[q.id];
+              if (Array.isArray(v)) v = v.join(" · ");
+              return `<div class="summary-item ${q.adaptive ? "summary-adaptive" : ""}"><b>${q.label}</b><p>${escapeHtml(v)}${q.type === "scale" ? " / 10" : ""}</p></div>`;
+            }).join("")}
+          </article>`).join("")}
+      </div>
+    </details>`;
 
   show(summary);
 }
